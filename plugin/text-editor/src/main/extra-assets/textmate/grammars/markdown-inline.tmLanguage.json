@@ -1,0 +1,8 @@
+{
+  "name": "Markdown Embedded HTML Fallback",
+  "scopeName": "text.html.basic",
+  "patterns": [
+    { "match": "</?[A-Za-z][^>]*>", "name": "meta.tag.inline.any.html" },
+    { "match": "<!--.*?-->", "name": "comment.block.html" }
+  ]
+}
