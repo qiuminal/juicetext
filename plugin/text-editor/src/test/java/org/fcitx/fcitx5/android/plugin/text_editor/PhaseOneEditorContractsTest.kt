@@ -9,6 +9,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
+import java.io.File
 
 class PhaseOneEditorContractsTest {
 
@@ -116,6 +117,17 @@ class PhaseOneEditorContractsTest {
     fun `markdown extension selects markdown scope`() {
         assertEquals("text.html.markdown", TextFileSupport.detectScopeName("README.md"))
         assertEquals("text.html.markdown", TextFileSupport.detectScopeName("guide.markdown"))
+    }
+
+    @Test
+    fun `markdown grammar avoids variable-length look-behind unsupported on Android`() {
+        val grammar = File(
+            "src/main/extra-assets/textmate/grammars/markdown.tmLanguage.json"
+        ).readText()
+
+        assertTrue(grammar.contains("\"name\": \"markup.strikethrough.markdown\""))
+        assertFalse(grammar.contains("(?<=\\\\w~~)"))
+        assertFalse(grammar.contains("(?<=_\\\\1)"))
     }
 
     @Test
