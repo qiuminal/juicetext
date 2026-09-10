@@ -126,7 +126,7 @@ public class IndentRange {
                         i--;
                     }
                     if (i > 0) {
-                        //??? previousRegions.length = i + 1;
+                        // Keep only regions through the current index.
                         previous = previousRegions.get(i);
 
                         // new folding range from pattern, includes the end line
