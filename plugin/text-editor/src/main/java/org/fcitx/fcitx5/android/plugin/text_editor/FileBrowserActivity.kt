@@ -50,7 +50,6 @@ class FileBrowserActivity : AppCompatActivity() {
     private var currentPath = ""
     private val entries = mutableListOf<Entry>()
     private val directorySnapshots = LinkedHashMap<String, DirectoryResult>()
-    private val sniffedTextUris = mutableSetOf<String>()
     private val adapter = FileAdapter()
 
     private var directoryJob: Job? = null
@@ -71,7 +70,8 @@ class FileBrowserActivity : AppCompatActivity() {
         val size: Long,
         val lastModified: Long,
         val isParent: Boolean,
-        val isDirectory: Boolean
+        val isDirectory: Boolean,
+        val textVerdict: TextFileVerdict? = null,
     )
 
     private data class DirectoryResult(
@@ -244,6 +244,7 @@ class FileBrowserActivity : AppCompatActivity() {
                     lastModified = item.lastModified,
                     isParent = false,
                     isDirectory = item.isDirectory,
+                    textVerdict = item.textVerdict,
                 )
             }.getOrNull()
         }
@@ -269,6 +270,7 @@ class FileBrowserActivity : AppCompatActivity() {
                     size = it.size,
                     lastModified = it.lastModified,
                     isDirectory = it.isDirectory,
+                    textVerdict = it.textVerdict,
                 )
             }
             .toList()
@@ -402,7 +404,9 @@ class FileBrowserActivity : AppCompatActivity() {
 
         directoryJob = lifecycleScope.launch {
             val result = try {
-                withContext(Dispatchers.IO) { scanDirectory(dir, root) }
+                withContext(Dispatchers.IO) {
+                    resolveAmbiguousTextIcons(scanDirectory(dir, root))
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
@@ -417,16 +421,15 @@ class FileBrowserActivity : AppCompatActivity() {
             }
 
             currentParent = result.parent
-            val resolvedResult = resolveAmbiguousTextIcons(result)
             if (generation != directoryGeneration) return@launch
-            directorySnapshots[dir.uri.toString()] = resolvedResult
+            directorySnapshots[dir.uri.toString()] = result
             while (directorySnapshots.size > MAX_SESSION_DIRECTORY_SNAPSHOTS) {
                 directorySnapshots.remove(directorySnapshots.keys.first())
             }
-            replaceEntries(resolvedResult.entries)
+            replaceEntries(result.entries)
             showingCachedRoot = false
-            if (dir.uri == root.uri) persistRootSnapshot(root, resolvedResult)
-            if (resolvedResult.entries.none { !it.isParent }) {
+            if (dir.uri == root.uri) persistRootSnapshot(root, result)
+            if (result.entries.none { !it.isParent }) {
                 showEmpty()
             } else {
                 showContent()
@@ -716,27 +719,26 @@ class FileBrowserActivity : AppCompatActivity() {
             .show()
     }
 
-    private suspend fun resolveAmbiguousTextIcons(result: DirectoryResult): DirectoryResult {
+    /** Resolves every regular file to an immutable icon verdict before publishing the directory. */
+    private fun resolveAmbiguousTextIcons(result: DirectoryResult): DirectoryResult {
         val resolved = result.entries.map { entry ->
-            if (entry.isParent || entry.isDirectory ||
-                TextFileSupport.extensionOf(entry.name) != "bak" ||
-                TextFileClassifier.classify(entry.name, entry.mimeType) != TextFileVerdict.NEEDS_SNIFFING
-            ) return@map entry
-            val supported = TextFileSupport.isProbablyTextFileAsync(
-                contentResolver,
-                entry.doc.uri,
-                entry.name,
-                entry.mimeType,
-            )
-            if (supported) sniffedTextUris += entry.doc.uri.toString()
-            entry
+            if (entry.isParent || entry.isDirectory) return@map entry
+            val metadataVerdict = TextFileClassifier.classify(entry.name, entry.mimeType)
+            val verdict = if (metadataVerdict != TextFileVerdict.NEEDS_SNIFFING) {
+                metadataVerdict
+            } else {
+                if (TextFileSupport.isProbablyTextFile(
+                        contentResolver,
+                        entry.doc.uri,
+                        entry.name,
+                        entry.mimeType,
+                    )
+                ) TextFileVerdict.TEXT else TextFileVerdict.BINARY
+            }
+            entry.copy(textVerdict = verdict)
         }
         return result.copy(entries = resolved)
     }
-
-    private fun isSupportedTextEntry(entry: Entry): Boolean =
-        entry.doc.uri.toString() in sniffedTextUris ||
-            TextFileClassifier.classify(entry.name, entry.mimeType) == TextFileVerdict.TEXT
 
     private inner class FileVH(val binding: ItemFileEntryBinding) :
         RecyclerView.ViewHolder(binding.root) {
@@ -767,8 +769,10 @@ class FileBrowserActivity : AppCompatActivity() {
                 }
                 else -> {
                     binding.icon.setImageResource(
-                        if (isSupportedTextEntry(entry)) R.drawable.ic_browser_text_file
-                        else R.drawable.ic_browser_unknown_file
+                        when (FileIconPolicy.regularFileIcon(entry.textVerdict)) {
+                            RegularFileIcon.EDITABLE_TEXT -> R.drawable.ic_browser_text_file
+                            RegularFileIcon.UNKNOWN -> R.drawable.ic_browser_unknown_file
+                        }
                     )
                     binding.icon.rotation = 0f
                     binding.info.text = FileEntryMetadataFormatter.formatLine(

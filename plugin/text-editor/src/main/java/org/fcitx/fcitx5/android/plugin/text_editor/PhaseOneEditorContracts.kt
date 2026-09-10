@@ -135,11 +135,14 @@ internal data class DirectorySnapshotEntry(
     val size: Long,
     val lastModified: Long,
     val isDirectory: Boolean,
+    val textVerdict: TextFileVerdict? = null,
 )
 
 /** Small, bounded root-directory snapshot used only for immediate cold-start presentation. */
 internal object DirectorySnapshotCodec {
-    private const val VERSION = "1"
+    // Version 2 persists the pre-read text/binary verdict. Rejecting v1 avoids briefly drawing an
+    // ambiguous file with the wrong icon before the first post-upgrade scan finishes.
+    private const val VERSION = "2"
     const val MAX_ENTRIES = 300
 
     fun encode(rootUri: String, entries: List<DirectorySnapshotEntry>): String = buildString {
@@ -150,7 +153,8 @@ internal object DirectorySnapshotCodec {
             append(encodeField(entry.mimeType.orEmpty())).append('\t')
             append(entry.size).append('\t')
             append(entry.lastModified).append('\t')
-            append(if (entry.isDirectory) '1' else '0').append('\n')
+            append(if (entry.isDirectory) '1' else '0').append('\t')
+            append(entry.textVerdict?.name.orEmpty()).append('\n')
         }
     }
 
@@ -162,16 +166,18 @@ internal object DirectorySnapshotCodec {
         if (decodeField(header[1]) != expectedRootUri) return null
         return lines.drop(1).take(MAX_ENTRIES).mapNotNull { line ->
             val fields = line.split('\t')
-            if (fields.size !in 5..6) return@mapNotNull null
+            if (fields.size != 7) return@mapNotNull null
             val size = fields[3].toLongOrNull() ?: return@mapNotNull null
-            val hasModifiedTime = fields.size == 6
             DirectorySnapshotEntry(
                 uri = decodeField(fields[0]),
                 name = decodeField(fields[1]),
                 mimeType = decodeField(fields[2]).ifEmpty { null },
                 size = size,
-                lastModified = if (hasModifiedTime) fields[4].toLongOrNull() ?: 0L else 0L,
-                isDirectory = fields[if (hasModifiedTime) 5 else 4] == "1",
+                lastModified = fields[4].toLongOrNull() ?: 0L,
+                isDirectory = fields[5] == "1",
+                textVerdict = fields[6].takeIf { it.isNotEmpty() }?.let {
+                    runCatching { TextFileVerdict.valueOf(it) }.getOrNull()
+                },
             )
         }
     }
@@ -222,6 +228,17 @@ internal enum class TextFileVerdict {
     TEXT,
     BINARY,
     NEEDS_SNIFFING,
+}
+
+internal enum class RegularFileIcon {
+    EDITABLE_TEXT,
+    UNKNOWN,
+}
+
+internal object FileIconPolicy {
+    fun regularFileIcon(verdict: TextFileVerdict?): RegularFileIcon =
+        if (verdict == TextFileVerdict.TEXT) RegularFileIcon.EDITABLE_TEXT
+        else RegularFileIcon.UNKNOWN
 }
 
 /** Pure filename/MIME part of text-file classification; byte sniffing remains an I/O concern. */

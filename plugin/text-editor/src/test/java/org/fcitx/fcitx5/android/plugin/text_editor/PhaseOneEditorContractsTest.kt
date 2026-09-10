@@ -240,9 +240,38 @@ class PhaseOneEditorContractsTest {
     }
 
     @Test
+    fun `resolved icon is a pure function of the pre-read verdict`() {
+        assertEquals(
+            RegularFileIcon.EDITABLE_TEXT,
+            FileIconPolicy.regularFileIcon(TextFileVerdict.TEXT),
+        )
+        assertEquals(RegularFileIcon.UNKNOWN, FileIconPolicy.regularFileIcon(TextFileVerdict.BINARY))
+        assertEquals(RegularFileIcon.UNKNOWN, FileIconPolicy.regularFileIcon(null))
+    }
+
+    @Test
+    fun `all ambiguous extensions are sniffed rather than only bak`() {
+        listOf("notes.BAK", "README", "archive.unknown").forEach { name ->
+            assertEquals(
+                TextFileVerdict.NEEDS_SNIFFING,
+                TextFileClassifier.classify(name, "application/octet-stream"),
+            )
+        }
+        assertEquals(TextFileVerdict.TEXT, TextFileClassifier.classify("source.md", null))
+        assertEquals(TextFileVerdict.BINARY, TextFileClassifier.classify("image.png", "text/plain"))
+    }
+
+    @Test
     fun `directory snapshot round trips and rejects a different root`() {
         val entries = listOf(
-            DirectorySnapshotEntry("content://root/a", "a b.txt", "text/plain", 42, 1_788_000_000_000, false),
+            DirectorySnapshotEntry(
+                "content://root/a", "a b.txt", "text/plain", 42, 1_788_000_000_000,
+                false, TextFileVerdict.TEXT,
+            ),
+            DirectorySnapshotEntry(
+                "content://root/backup", "notes.bak", "application/octet-stream", 84,
+                1_788_000_000_001, false, TextFileVerdict.TEXT,
+            ),
             DirectorySnapshotEntry("content://root/folder", "资料", null, -1, 0, true),
         )
         val encoded = DirectorySnapshotCodec.encode("content://root", entries)
