@@ -85,8 +85,8 @@ class TextFileEditActivity : AppCompatActivity() {
     private var externalCheckInFlight: Boolean = false
     private var fileOperationGeneration: Long = 0L
     private var fileOperationInProgress: Boolean = false
-    // Large files use a lower-overhead layout and disable autocomplete, but keep TextMate syntax
-    // highlighting and load the complete supported document so the scrollbar maps to real EOF.
+    // Large files use a lower-overhead layout, disable autocomplete and page content into the
+    // editor, while retaining the filename-selected TextMate grammar for each loaded page.
     private var isLargeFile: Boolean = false
     private var observedTextSizeChangeId: Long = 0L
     private var lowMemoryMode: Boolean = false
@@ -1045,8 +1045,12 @@ class TextFileEditActivity : AppCompatActivity() {
             return
         }
         targetTab.largeFilePager = pager
+        // Publish the first page immediately. Sora's initial TextMate pass only publishes styles
+        // after every currently loaded line has been tokenized; feeding the complete large file
+        // here made a 400k-line dictionary look permanently unhighlighted. Remaining pages are
+        // appended as the user approaches the loaded end and are analyzed incrementally.
         val content = try {
-            withContext(Dispatchers.IO) { pager.readAllText() }
+            withContext(Dispatchers.IO) { pager.readNextTextPage().orEmpty() }
         } catch (e: Exception) {
             pager.close()
             targetTab.largeFilePager = null
@@ -1339,7 +1343,6 @@ class TextFileEditActivity : AppCompatActivity() {
         private const val PREF_WORD_WRAP = "word_wrap"
         private const val PREF_SHOW_WHITESPACE = "show_whitespace"
         private const val PREF_USE_TAB = "use_tab"
-        private const val LARGE_FILE_PAGE_BYTES = 1024 * 1024
         private const val PREFETCH_VIEWPORT_MULTIPLIER = 2
         private const val DRAFT_SAVE_DEBOUNCE_MS = 750L
     }
@@ -1367,20 +1370,11 @@ class TextFileEditActivity : AppCompatActivity() {
             }
         }
 
-        fun readAllText(): String {
-            val result = StringBuilder()
-            while (true) {
-                val page = readNextTextPage() ?: break
-                result.append(page)
-            }
-            return result.toString()
-        }
-
         fun readNextTextPage(): String? {
             if (isFullyConsumed) return null
             val bytes = when {
-                channel != null -> readMappedBytes(LARGE_FILE_PAGE_BYTES)
-                stream != null -> readStreamBytes(LARGE_FILE_PAGE_BYTES)
+                channel != null -> readMappedBytes(TextFileSupport.LARGE_FILE_PAGE_BYTES)
+                stream != null -> readStreamBytes(TextFileSupport.LARGE_FILE_PAGE_BYTES)
                 else -> ByteArray(0)
             }
             if (bytes.isEmpty() && isFullyConsumed) {

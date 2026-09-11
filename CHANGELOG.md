@@ -7,7 +7,8 @@ All notable changes to juicetext are recorded here. Release tags use the format 
 - Added a selection dialog for the default editor text size.
 - Treat Pinch text-size changes as session-local: merely visiting editor options no longer overwrites the temporary size; choosing a size explicitly still applies the new default.
 - Added per-tab URI-bound draft loading and fixed new tabs inheriting another tab's unsaved state.
-- Added stable directory snapshots, file icons and metadata, external-change detection, manual light/dark theme selection, and large-file EOF loading.
+- Added stable directory snapshots, file icons and metadata, external-change detection, manual light/dark theme selection, and paged large-file loading with TextMate syntax highlighting.
+- Known limitation: syntax colors for a large file can appear about two seconds after its text becomes visible; reducing this initial TextMate latency is deferred to a later fix.
 - Added focused unit coverage for editor state and text-size override behavior.
 
 ## [0.3.0] - 2026-09-09

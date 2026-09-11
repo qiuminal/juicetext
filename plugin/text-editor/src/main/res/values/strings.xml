@@ -45,7 +45,7 @@
     <string name="word_wrap">Word wrap</string>
     <string name="show_whitespace">Show whitespace</string>
     <string name="tab_inserts_spaces">Tab inserts spaces</string>
-    <string name="plain_mode">plain mode</string>
+    <string name="plain_mode">large file mode</string>
 
     <string name="editor_options">Options</string>
     <string name="external_change_detection">Reload on external change</string>

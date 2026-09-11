@@ -41,7 +41,7 @@
     <string name="word_wrap">Перенос строк</string>
     <string name="show_whitespace">Показывать пробелы</string>
     <string name="tab_inserts_spaces">Tab вставляет пробелы</string>
-    <string name="plain_mode">простой режим</string>
+    <string name="plain_mode">режим большого файла</string>
 
     <string name="editor_options">Параметры</string>
     <string name="default_text_size">Размер текста по умолчанию</string>

@@ -41,7 +41,7 @@
     <string name="word_wrap">Ajuste de línea</string>
     <string name="show_whitespace">Mostrar espacios en blanco</string>
     <string name="tab_inserts_spaces">Tab inserta espacios</string>
-    <string name="plain_mode">modo texto plano</string>
+    <string name="plain_mode">modo de archivo grande</string>
 
     <string name="editor_options">Opciones</string>
     <string name="default_text_size">Tamaño de texto predeterminado</string>

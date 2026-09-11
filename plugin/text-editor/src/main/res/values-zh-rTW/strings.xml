@@ -44,7 +44,7 @@
     <string name="word_wrap">自動換行</string>
     <string name="show_whitespace">顯示空白字元</string>
     <string name="tab_inserts_spaces">Tab 鍵插入空格</string>
-    <string name="plain_mode">純文字模式</string>
+    <string name="plain_mode">大型檔案模式</string>
 
     <string name="editor_options">選項</string>
     <string name="external_change_detection">外部變更時重新載入</string>

@@ -114,6 +114,20 @@ class PhaseOneEditorContractsTest {
     }
 
     @Test
+    fun `large YAML keeps its grammar and starts with one bounded page`() {
+        val size = 12_070_870L
+
+        assertTrue(TextFileSupport.isLargeFile(size))
+        assertEquals("source.yaml", TextFileSupport.detectScopeName("PY_c.dict.yaml"))
+        assertEquals(
+            TextFileSupport.LARGE_FILE_PAGE_BYTES,
+            TextFileSupport.largeFileInitialPageBytes(size),
+        )
+        assertEquals(151, TextFileSupport.largeFileInitialPageBytes(151))
+        assertEquals(0, TextFileSupport.largeFileInitialPageBytes(-1))
+    }
+
+    @Test
     fun `markdown extension selects markdown scope`() {
         assertEquals("text.html.markdown", TextFileSupport.detectScopeName("README.md"))
         assertEquals("text.html.markdown", TextFileSupport.detectScopeName("guide.markdown"))

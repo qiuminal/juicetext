@@ -17,8 +17,12 @@ object TextFileSupport {
     // Files above this size use a lower-overhead editor configuration (no wrapping/autocomplete),
     // but supported TextMate syntax highlighting remains enabled.
     const val LARGE_FILE_THRESHOLD: Long = 10L * 1024 * 1024 // 10 MB
+    const val LARGE_FILE_PAGE_BYTES: Int = 1024 * 1024 // 1 MB
 
     fun isLargeFile(bytes: Long): Boolean = bytes >= LARGE_FILE_THRESHOLD
+
+    fun largeFileInitialPageBytes(fileSize: Long): Int =
+        minOf(fileSize.coerceAtLeast(0L), LARGE_FILE_PAGE_BYTES.toLong()).toInt()
 
     private val KNOWN_TEXT_EXTENSIONS = setOf(
         "txt", "md", "markdown", "rst", "log",
