@@ -235,6 +235,26 @@ internal enum class RegularFileIcon {
     UNKNOWN,
 }
 
+/**
+ * Picks a non-colliding file name for a freshly created document. The SAF provider also
+ * de-duplicates, but choosing the name up front keeps the result predictable and lets the browser
+ * highlight the exact entry after the directory refreshes.
+ */
+internal object NewFileNaming {
+    fun uniqueName(baseName: String, extension: String, existingNames: Set<String>): String {
+        val ext = if (extension.startsWith(".")) extension else ".$extension"
+        val existingLower = existingNames.mapTo(HashSet()) { it.lowercase() }
+        val first = "$baseName$ext"
+        if (first.lowercase() !in existingLower) return first
+        var index = 2
+        while (true) {
+            val candidate = "$baseName $index$ext"
+            if (candidate.lowercase() !in existingLower) return candidate
+            index++
+        }
+    }
+}
+
 internal object FileIconPolicy {
     fun regularFileIcon(verdict: TextFileVerdict?): RegularFileIcon =
         if (verdict == TextFileVerdict.TEXT) RegularFileIcon.EDITABLE_TEXT

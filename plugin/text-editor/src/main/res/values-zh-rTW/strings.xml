@@ -77,6 +77,9 @@
     <string name="grant_access_denied">未授予存取權限，無法啟動編輯器。</string>
     <string name="change_root_folder">切換根目錄</string>
     <string name="open_single_file">開啟單一檔案…</string>
+    <string name="new_text_file">新建文字文件</string>
+    <string name="new_text_file_default_name">新建文字文件</string>
+    <string name="new_text_file_failed">新建文字文件失敗</string>
     <string name="low_memory_features_disabled">記憶體不足：已關閉部分功能（語法高亮、診斷、自動補全）。</string>
     <string name="editor_runtime_recovered">編輯器發生異常，已自動降級部分功能以保持可用。</string>
     <string name="open_file">開啟</string>

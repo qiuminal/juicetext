@@ -78,6 +78,9 @@
     <string name="grant_access_denied">Access not granted; the editor cannot start.</string>
     <string name="change_root_folder">Change root folder</string>
     <string name="open_single_file">Open single file…</string>
+    <string name="new_text_file">New text file</string>
+    <string name="new_text_file_default_name">untitled</string>
+    <string name="new_text_file_failed">Failed to create text file</string>
     <string name="low_memory_features_disabled">Low memory: some features were disabled (syntax highlight, diagnostics, auto-completion).</string>
     <string name="editor_runtime_recovered">An editor error occurred. Some features were disabled to keep the app responsive.</string>
     <string name="open_file">Open</string>

@@ -4,6 +4,7 @@ All notable changes to juicetext are recorded here. Release tags use the format 
 
 ## Unreleased
 
+- Added a "New text file" action to the file-browser menu that creates a `.txt` in the current folder and opens it for editing.
 - Added a selection dialog for the default editor text size.
 - Treat Pinch text-size changes as session-local: merely visiting editor options no longer overwrites the temporary size; choosing a size explicitly still applies the new default.
 - Added per-tab URI-bound draft loading and fixed new tabs inheriting another tab's unsaved state.

@@ -226,6 +226,13 @@ class FileBrowserActivity : AppCompatActivity() {
                 true
             }
         }
+        menu.add(R.string.new_text_file).apply {
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+            setOnMenuItemClickListener {
+                createNewTextFile()
+                true
+            }
+        }
         return true
     }
 
@@ -572,6 +579,35 @@ class FileBrowserActivity : AppCompatActivity() {
         fileOpenJob?.cancel()
         fileOpenJob = lifecycleScope.launch {
             openFileUri(entry.doc.uri, entry.name, entry.mimeType, entry.size)
+        }
+    }
+
+    private fun createNewTextFile() {
+        val dir = currentDir
+        if (dir == null) {
+            toast(getString(R.string.new_text_file_failed))
+            return
+        }
+        val baseName = getString(R.string.new_text_file_default_name)
+        val existing = entries.asSequence()
+            .filterNot { it.isParent }
+            .map { it.name }
+            .toSet()
+        val fileName = NewFileNaming.uniqueName(baseName, "txt", existing)
+        fileOpenJob?.cancel()
+        fileOpenJob = lifecycleScope.launch {
+            val created = withContext(Dispatchers.IO) {
+                try {
+                    dir.createFile("text/plain", fileName)
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            if (created == null) {
+                toast(getString(R.string.new_text_file_failed))
+                return@launch
+            }
+            openFileUri(created.uri, created.name ?: fileName, "text/plain", 0L)
         }
     }
 

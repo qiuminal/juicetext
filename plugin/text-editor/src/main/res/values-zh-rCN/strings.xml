@@ -78,6 +78,9 @@
     <string name="grant_access_denied">未授权，无法启动编辑器。</string>
     <string name="change_root_folder">切换根目录</string>
     <string name="open_single_file">打开单个文件…</string>
+    <string name="new_text_file">新建文本文档</string>
+    <string name="new_text_file_default_name">新建文本文档</string>
+    <string name="new_text_file_failed">新建文本文档失败</string>
     <string name="low_memory_features_disabled">内存不足：已关闭部分功能（语法高亮、诊断、自动补全）。</string>
     <string name="editor_runtime_recovered">编辑器发生异常，已自动降级部分功能以保持可用。</string>
     <string name="open_file">打开</string>

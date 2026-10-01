@@ -128,6 +128,20 @@ class PhaseOneEditorContractsTest {
     }
 
     @Test
+    fun `new text file name avoids collisions case-insensitively`() {
+        assertEquals("untitled.txt", NewFileNaming.uniqueName("untitled", "txt", emptySet()))
+        assertEquals("note.txt", NewFileNaming.uniqueName("note", ".txt", emptySet()))
+        assertEquals(
+            "untitled 2.txt",
+            NewFileNaming.uniqueName("untitled", "txt", setOf("untitled.txt")),
+        )
+        assertEquals(
+            "untitled 3.txt",
+            NewFileNaming.uniqueName("untitled", "txt", setOf("UNTITLED.TXT", "Untitled 2.txt")),
+        )
+    }
+
+    @Test
     fun `markdown extension selects markdown scope`() {
         assertEquals("text.html.markdown", TextFileSupport.detectScopeName("README.md"))
         assertEquals("text.html.markdown", TextFileSupport.detectScopeName("guide.markdown"))
