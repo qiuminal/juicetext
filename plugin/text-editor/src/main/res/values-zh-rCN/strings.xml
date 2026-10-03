@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="shizuku_open">通过 Shizuku 浏览全部文件</string>
+    <string name="shizuku_denied">未授予 Shizuku 权限</string>
+    <string name="shizuku_unavailable">请启动 Shizuku 后重试</string>
+    <string name="shizuku_update">请更新 Shizuku 后重试</string>
+    <string name="shizuku_backend">Shizuku · UID %1$d</string>
     <string name="app_name_debug">就文本（调试）</string>
     <string name="app_name_release">就文本</string>
 

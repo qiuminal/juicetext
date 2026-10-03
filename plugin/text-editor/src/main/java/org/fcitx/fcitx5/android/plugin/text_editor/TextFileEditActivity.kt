@@ -968,12 +968,14 @@ class TextFileEditActivity : AppCompatActivity() {
         val targetUri = targetTab.uri
         val targetEditor = targetTab.editor ?: return
         lifecycleScope.launch(crashHandler) {
-            if (targetTab.isLargeFile) {
+            if (targetTab.isLargeFile && !TextFileSupport.isShizukuUri(targetTab.uri)) {
                 loadLargeFile(targetTab)
                 return@launch
             }
             val original = try {
-                withContext(Dispatchers.IO) {
+                if (TextFileSupport.isShizukuUri(targetUri)) {
+                    ShizukuFileReader(this@TextFileEditActivity).readText(targetUri.path!!)
+                } else withContext(Dispatchers.IO) {
                     TextFileSupport.openInputStream(contentResolver, targetUri)?.use {
                         it.readBytes().decodeToString()
                     } ?: error("openInputStream returned null")
@@ -1135,7 +1137,9 @@ class TextFileEditActivity : AppCompatActivity() {
                 withContext(Dispatchers.IO) {
                     // "wt" = truncate-and-write. Without 't', some providers append rather than
                     // overwrite, leaving stale tail bytes when the new content is shorter.
-                    TextFileSupport.openOutputStream(contentResolver, targetUri)?.use {
+                    if (TextFileSupport.isShizukuUri(targetUri)) {
+                        ShizukuFileReader(this@TextFileEditActivity).writeText(targetUri.path!!, content)
+                    } else TextFileSupport.openOutputStream(contentResolver, targetUri)?.use {
                         it.write(content.toByteArray())
                     } ?: error("openOutputStream returned null")
                     runCatching { draftFileForUri(targetUri).delete() }

@@ -7,9 +7,23 @@ android {
 
     defaultConfig {
         applicationId = "com.qiuminal.juicetext"
+        minSdk = 24
+    }
+
+    buildTypes {
+        release {
+            resValue("string", "app_name", "@string/app_name_release")
+            proguardFile("proguard-rules.pro")
+        }
+        debug {
+            applicationIdSuffix = ".debug"
+            resValue("string", "app_name", "@string/app_name_debug")
+        }
     }
 
     buildFeatures {
+        aidl = true
+        buildConfig = true
         resValues = true
         viewBinding = true
     }
@@ -23,15 +37,6 @@ android {
         }
     }
 
-    buildTypes {
-        release {
-            resValue("string", "app_name", "@string/app_name_release")
-            proguardFile("proguard-rules.pro")
-        }
-        debug {
-            resValue("string", "app_name", "@string/app_name_debug")
-        }
-    }
 }
 
 dependencies {
@@ -50,6 +55,8 @@ dependencies {
     implementation(libs.splitties.resources)
     implementation(libs.splitties.views.dsl)
     implementation(libs.timber)
+    implementation(libs.shizuku.api)
+    implementation(libs.shizuku.provider)
 
     testImplementation(libs.junit)
 }

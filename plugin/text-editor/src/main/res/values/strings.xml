@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="shizuku_open">Browse all files with Shizuku</string>
+    <string name="shizuku_denied">Shizuku permission denied</string>
+    <string name="shizuku_unavailable">Start Shizuku, then try again</string>
+    <string name="shizuku_update">Update Shizuku to continue</string>
+    <string name="shizuku_backend">Shizuku · UID %1$d</string>
     <string name="app_name_debug">juicetext (Debug)</string>
     <string name="app_name_release">juicetext</string>
 

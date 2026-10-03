@@ -44,6 +44,7 @@ import kotlinx.coroutines.withContext
 import org.fcitx.fcitx5.android.plugin.text_editor.databinding.ActivityFileBrowserBinding
 import org.fcitx.fcitx5.android.plugin.text_editor.databinding.ItemFileEntryBinding
 import splitties.views.topPadding
+import rikka.shizuku.Shizuku
 
 class FileBrowserActivity : AppCompatActivity() {
 
@@ -54,8 +55,11 @@ class FileBrowserActivity : AppCompatActivity() {
     private var currentDir: DocumentFile? = null
     private var currentParent: DocumentFile? = null
     private var currentPath = ""
+    private var shizukuMode = false
+    private var shizukuPath = ""
     private val entries = mutableListOf<Entry>()
     private val directorySnapshots = LinkedHashMap<String, DirectoryResult>()
+    private val shizukuSnapshots = LinkedHashMap<String, DirectoryResult>()
     private val adapter = FileAdapter()
 
     private var directoryJob: Job? = null
@@ -67,6 +71,19 @@ class FileBrowserActivity : AppCompatActivity() {
     private var showingCachedRoot = false
     private var restoredPath: String? = null
     private var highlightedUri: String? = null
+    private var awaitingShizuku = false
+    private var pendingShizukuPath = "/storage/emulated/0"
+    private val shizukuReader by lazy { ShizukuFileReader(this, keepConnected = true) }
+    private val shizukuPermissionListener = Shizuku.OnRequestPermissionResultListener { code, grant ->
+        if (code == ShizukuFileReader.PERMISSION_REQUEST_CODE && awaitingShizuku) {
+            awaitingShizuku = false
+            if (grant == PackageManager.PERMISSION_GRANTED) {
+                shizukuMode = true
+                navigateShizuku(pendingShizukuPath)
+            }
+            else toast(getString(R.string.shizuku_denied))
+        }
+    }
 
     /** Provider metadata is captured during the IO scan; binding never touches DocumentFile. */
     private data class Entry(
@@ -102,6 +119,7 @@ class FileBrowserActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         ManualTheme.apply(this)
         super.onCreate(savedInstanceState)
+        Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
         prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         restoredPath = savedInstanceState?.getString(STATE_CURRENT_PATH)
 
@@ -139,6 +157,17 @@ class FileBrowserActivity : AppCompatActivity() {
                     finish()
                     return
                 }
+                if (shizukuMode) {
+                    val parent = File(shizukuPath).parentFile?.path
+                    if (shizukuPath == "/storage/emulated/0" || parent == null ||
+                        parent == "/storage/emulated/0") {
+                        shizukuMode = false
+                        navigateTo(root, "/", backgroundRefresh = true)
+                    } else {
+                        navigateShizuku(parent)
+                    }
+                    return
+                }
                 if (current.uri == root.uri) {
                     finish()
                     return
@@ -166,6 +195,12 @@ class FileBrowserActivity : AppCompatActivity() {
         super.onSaveInstanceState(outState)
     }
 
+    override fun onDestroy() {
+        shizukuReader.close()
+        Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener)
+        super.onDestroy()
+    }
+
     override fun onResume() {
         super.onResume()
         ensureStorageAccess()
@@ -190,6 +225,22 @@ class FileBrowserActivity : AppCompatActivity() {
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        if (!pickingDirectory) menu.add(R.string.shizuku_open).setOnMenuItemClickListener {
+            try {
+                check(Shizuku.pingBinder()) { getString(R.string.shizuku_unavailable) }
+                check(!Shizuku.isPreV11()) { getString(R.string.shizuku_update) }
+                if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) openShizukuBrowser()
+                else {
+                    pendingShizukuPath = "/storage/emulated/0"
+                    awaitingShizuku = true
+                    Shizuku.requestPermission(ShizukuFileReader.PERMISSION_REQUEST_CODE)
+                }
+            } catch (e: Exception) {
+                awaitingShizuku = false
+                toast(e.message ?: getString(R.string.shizuku_unavailable))
+            }
+            true
+        }
         menu.add(Menu.NONE, MENU_THEME_TOGGLE, Menu.NONE, R.string.theme_toggle).apply {
             icon = getDrawable(
                 if (ManualTheme.isDark(this@FileBrowserActivity)) R.drawable.ic_theme_light
@@ -221,6 +272,126 @@ class FileBrowserActivity : AppCompatActivity() {
             }
         }
         return true
+    }
+
+    private fun openShizukuBrowser() {
+        // Shizuku permission belongs to the app service, not to a user-selected directory.
+        shizukuMode = true
+        navigateShizuku("/storage/emulated/0")
+    }
+
+    private fun navigateShizuku(path: String) {
+        if ((path == "/storage/emulated/0/Android" || path == "/storage/emulated/0") &&
+            rootTree != null) {
+            shizukuMode = false
+            navigateTo(DocumentFile.fromFile(File(path)),
+                path.removePrefix("/storage/emulated/0").ifEmpty { "/" }, backgroundRefresh = true)
+            return
+        }
+        if (!shizukuMode) shizukuMode = true
+        directoryJob?.cancel()
+        val generation = ++directoryGeneration
+        shizukuPath = path
+        currentPath = path
+        binding.pathBar.text = path
+        val sameDirectory = currentDir?.uri?.path == path
+        currentDir = DocumentFile.fromFile(File(path))
+        currentParent = File(path).parentFile?.let(DocumentFile::fromFile)
+        val cached = shizukuSnapshots[path]
+        if (cached != null) {
+            replaceEntries(cached.entries)
+            if (cached.entries.none { !it.isParent }) showEmpty() else showContent()
+            if (!sameDirectory) binding.recyclerView.scrollToPosition(0)
+        } else {
+            showLoading(path)
+        }
+        directoryJob = lifecycleScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    scanShizukuDirectory(path)
+                }
+                if (generation != directoryGeneration) return@launch
+                currentDir = DocumentFile.fromFile(File(path))
+                currentParent = File(path).parentFile?.let(DocumentFile::fromFile)
+                shizukuSnapshots[path] = result
+                while (shizukuSnapshots.size > MAX_SESSION_DIRECTORY_SNAPSHOTS) {
+                    shizukuSnapshots.remove(shizukuSnapshots.keys.first())
+                }
+                replaceEntries(result.entries)
+                if (result.entries.none { !it.isParent }) showEmpty() else showContent()
+                if (cached == null && !sameDirectory) binding.recyclerView.scrollToPosition(0)
+                directoryJob = null
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (generation == directoryGeneration) {
+                    directoryJob = null
+                    showState(getString(R.string.error_open_file, e.message)) { navigateShizuku(path) }
+                }
+            }
+        }
+    }
+
+    private fun openShizukuFile(path: String) {
+        if (fileOpenJob?.isActive == true) return
+        fileOpenJob = lifecycleScope.launch {
+            try {
+                val size = shizukuReader.useService { it.fileSize(path) }
+                openFileUri(Uri.Builder().scheme("shizuku").path(path).build(), File(path).name,
+                    null, size)
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { toast(getString(R.string.error_open_file, e.message)) }
+        }
+    }
+
+    private suspend fun scanShizukuDirectory(path: String): DirectoryResult {
+        val scanned = shizukuReader.useService { remote ->
+            remote.list(path).map { rawName ->
+                currentCoroutineContext().ensureActive()
+                val directory = rawName.endsWith("/")
+                val name = rawName.removeSuffix("/")
+                val childPath = File(path, name).path
+                val size = if (directory) -1L else remote.fileSize(childPath)
+                val modified = remote.lastModified(childPath)
+                Triple(rawName, size, modified)
+            }
+        }
+        val parent = File(path).parentFile?.takeIf {
+            path != "/storage/emulated/0" && it.path != "/storage/emulated"
+        }
+        val children = scanned.map { (rawName, size, modified) ->
+            currentCoroutineContext().ensureActive()
+            val isDirectory = rawName.endsWith("/")
+            val name = rawName.removeSuffix("/")
+            val entryPath = File(path, name).path
+            Entry(
+                doc = DocumentFile.fromFile(File(entryPath)),
+                name = name,
+                mimeType = if (isDirectory) null else "text/plain",
+                size = size,
+                lastModified = modified,
+                isParent = false,
+                isDirectory = isDirectory,
+                textVerdict = if (isDirectory) null else TextFileClassifier.classify(
+                    name, "text/plain"
+                ).let { if (it == TextFileVerdict.NEEDS_SNIFFING) TextFileVerdict.TEXT else it }
+            )
+        }.sortedWith(compareBy<Entry> { !it.isDirectory }.thenBy { it.name.lowercase() })
+        val allEntries = buildList {
+            if (parent != null) add(
+                Entry(
+                    doc = DocumentFile.fromFile(parent),
+                    name = getString(R.string.parent_directory),
+                    mimeType = null,
+                    size = -1L,
+                    lastModified = 0L,
+                    isParent = true,
+                    isDirectory = true,
+                )
+            )
+            addAll(children)
+        }
+        return DirectoryResult(allEntries, parent?.let(DocumentFile::fromFile))
     }
 
     private fun restoreCachedRootSnapshot() {
@@ -371,6 +542,7 @@ class FileBrowserActivity : AppCompatActivity() {
         backgroundRefresh: Boolean = false,
     ) {
         val root = rootTree ?: return
+        shizukuMode = false
         directoryJob?.cancel()
         val generation = ++directoryGeneration
         val previousDirUri = currentDir?.uri
@@ -398,7 +570,7 @@ class FileBrowserActivity : AppCompatActivity() {
         directoryJob = lifecycleScope.launch {
             val result = try {
                 withContext(Dispatchers.IO) {
-                    resolveAmbiguousTextIcons(scanDirectory(dir, root))
+                    scanDirectory(dir, root)
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -427,7 +599,7 @@ class FileBrowserActivity : AppCompatActivity() {
             } else {
                 showContent()
             }
-            if (!preserveScroll) binding.recyclerView.scrollToPosition(0)
+            if (!preserveScroll && snapshot == null) binding.recyclerView.scrollToPosition(0)
         }
     }
 
@@ -443,15 +615,18 @@ class FileBrowserActivity : AppCompatActivity() {
         }
         val children = (File(dir.uri.path!!).listFiles()
             ?: throw java.io.IOException("Cannot list ${dir.uri.path}"))
-            .map(DocumentFile::fromFile).map { child ->
+            .map { file ->
             currentCoroutineContext().ensureActive()
-            val isDirectory = child.isDirectory
+            val metadata = android.system.Os.stat(file.path)
+            val isDirectory = android.system.OsConstants.S_ISDIR(metadata.st_mode)
+            val mimeType = if (isDirectory) null else android.webkit.MimeTypeMap.getSingleton()
+                .getMimeTypeFromExtension(file.extension.lowercase())
             Entry(
-                doc = child,
-                name = child.name ?: "?",
-                mimeType = child.type,
-                size = if (isDirectory) -1L else child.length(),
-                lastModified = child.lastModified(),
+                doc = DocumentFile.fromFile(file),
+                name = file.name,
+                mimeType = mimeType,
+                size = if (isDirectory) -1L else metadata.st_size,
+                lastModified = metadata.st_mtime * 1000L,
                 isParent = false,
                 isDirectory = isDirectory
             )
@@ -495,6 +670,10 @@ class FileBrowserActivity : AppCompatActivity() {
     }
 
     private fun refreshCurrentDirectory(showProgress: Boolean = true) {
+        if (shizukuMode) {
+            navigateShizuku(shizukuPath)
+            return
+        }
         val dir = currentDir ?: return
         navigateTo(dir, currentPath, preserveScroll = true, showProgress = showProgress)
     }
@@ -553,6 +732,33 @@ class FileBrowserActivity : AppCompatActivity() {
     }
 
     private fun onEntryClick(entry: Entry) {
+        if (shizukuMode) {
+            if (entry.isParent) {
+                navigateShizuku(File(shizukuPath).parentFile?.path ?: "/storage/emulated/0")
+            } else if (entry.isDirectory) {
+                navigateShizuku(File(shizukuPath, entry.name).path)
+            } else if (!pickingDirectory) {
+                openShizukuFile(File(shizukuPath, entry.name).path)
+            }
+            return
+        }
+        if (!entry.isParent && entry.isDirectory) {
+            val path = entry.doc.uri.path.orEmpty()
+            if (path == "/storage/emulated/0/Android/data" ||
+                path.startsWith("/storage/emulated/0/Android/data/")) {
+                if (hasShizukuAccess()) {
+                    shizukuMode = true
+                    navigateShizuku(path)
+                } else if (runCatching { Shizuku.pingBinder() }.getOrDefault(false)) {
+                    pendingShizukuPath = path
+                    awaitingShizuku = true
+                    Shizuku.requestPermission(ShizukuFileReader.PERMISSION_REQUEST_CODE)
+                } else {
+                    navigateTo(entry.doc, childPath(currentPath, entry.name), backgroundRefresh = true)
+                }
+                return
+            }
+        }
         if (entry.isParent || entry.isDirectory) {
             val targetPath = if (entry.isParent) {
                 parentPath(currentPath)
@@ -568,6 +774,11 @@ class FileBrowserActivity : AppCompatActivity() {
             openFileUri(entry.doc.uri, entry.name, entry.mimeType, entry.size)
         }
     }
+
+    private fun hasShizukuAccess(): Boolean = runCatching {
+        Shizuku.pingBinder() && !Shizuku.isPreV11() &&
+            Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+    }.getOrDefault(false)
 
     private fun createNewTextFile() {
         val dir = currentDir

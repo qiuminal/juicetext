@@ -3,3 +3,4 @@
 -keep class org.eclipse.tm4e.** { *; }
 -dontwarn org.eclipse.tm4e.**
 -dontwarn io.github.rosemoe.sora.**
+-keep class org.fcitx.fcitx5.android.plugin.text_editor.ShizukuFileService { *; }

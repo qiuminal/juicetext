@@ -18,7 +18,9 @@ object TextFileSupport {
 
     fun openInputStream(resolver: ContentResolver, uri: Uri): InputStream? =
         if (uri.scheme == "file") FileInputStream(requireNotNull(uri.path))
-        else resolver.openInputStream(uri)
+            else resolver.openInputStream(uri)
+
+    fun isShizukuUri(uri: Uri): Boolean = uri.scheme == "shizuku"
 
     fun openOutputStream(resolver: ContentResolver, uri: Uri): OutputStream? =
         if (uri.scheme == "file") FileOutputStream(requireNotNull(uri.path))

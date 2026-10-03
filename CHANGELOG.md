@@ -4,6 +4,12 @@ All notable changes to juicetext are recorded here. Release tags use the format 
 
 ## Unreleased
 
+## [0.3.3] - 2026-10-03
+
+- Added Shizuku UserService access for browsing, reading, editing, and saving files under shared storage, including Android/data.
+- Unified Shizuku and ordinary directory browsing and improved directory navigation responsiveness with connection reuse and cached listings.
+- Added bounded remote file operations, path validation, external-change detection, and Debug/Release application ID separation.
+
 ## [0.3.2] - 2026-10-03
 
 - Request all-files access on first launch, browse shared storage directly, and replace SAF opening and root selection with the built-in file browser.

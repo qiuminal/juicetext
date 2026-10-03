@@ -10,7 +10,7 @@ Independent Android text editor derived from the Fcitx5 Android fx version text-
 
 ## Current development state
 
-Current release: **0.3.2**. Download signed APKs from [GitHub Releases](https://github.com/qiuminal/juicetext/releases).
+Current release: **0.3.3**. Download signed APKs from [GitHub Releases](https://github.com/qiuminal/juicetext/releases).
 
 - Shared storage is browsed directly after granting all-files access; root folders are selected inside the app.
 - Large text files use paged loading with TextMate highlighting and optimized YAML colors.
@@ -21,6 +21,21 @@ Current release: **0.3.2**. Download signed APKs from [GitHub Releases](https://
 - Selecting a concrete default size in editor options explicitly applies that size.
 
 The remaining editor issues are tracked and will be fixed individually with device validation before release.
+
+### Shizuku
+
+Start Shizuku and grant the app permission. The normal file browser then uses the
+Shizuku UserService automatically when entering protected shared-storage paths,
+including `/storage/emulated/0/Android/data/...`. Files are edited and saved in
+place; no directory selection or imported copy is required.
+
+The service exposes directory listing, size/modification metadata, bounded 64 KiB
+reads and writes, and file truncation. Paths are canonicalized and restricted to
+primary shared storage. Directories with more than 512 entries require a narrower input path.
+Access errors and a stopped or unauthorized Shizuku service are reported without
+preventing ordinary file browsing. Actual access depends on the selected backend.
+Device authorization, disconnect and Android/data access depend on the selected
+Shizuku backend and its permissions.
 
 ## Project structure
 
@@ -34,6 +49,11 @@ Other upstream source directories remain for license and provenance purposes but
 ## Build and test
 
 Requirements: JDK 17 and Android SDK 36.
+The Shizuku-enabled application requires Android 7.0 (API 24) or newer.
+
+On Termux, install its native `aidl` package and configure the local SDK build-tools
+`aidl` executable to use it; the SDK's Linux x86 binary cannot run on ARM Android.
+Shizuku API/provider 13.1.5 must be cached once before using `--offline` builds.
 
 ```powershell
 .\gradlew.bat :plugin:text-editor:testDebugUnitTest
