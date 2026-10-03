@@ -6,11 +6,23 @@ package org.fcitx.fcitx5.android.plugin.text_editor
 
 import android.content.ContentResolver
 import android.net.Uri
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.io.InputStream
+import java.io.OutputStream
 import androidx.documentfile.provider.DocumentFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 object TextFileSupport {
+
+    fun openInputStream(resolver: ContentResolver, uri: Uri): InputStream? =
+        if (uri.scheme == "file") FileInputStream(requireNotNull(uri.path))
+        else resolver.openInputStream(uri)
+
+    fun openOutputStream(resolver: ContentResolver, uri: Uri): OutputStream? =
+        if (uri.scheme == "file") FileOutputStream(requireNotNull(uri.path))
+        else resolver.openOutputStream(uri, "wt")
 
     const val MAX_FILE_SIZE: Long = 100L * 1024 * 1024 // 100 MB
 
@@ -91,7 +103,7 @@ object TextFileSupport {
     }
 
     private fun sniffIsText(resolver: ContentResolver, uri: Uri): Boolean = try {
-        resolver.openInputStream(uri)?.use { input ->
+        openInputStream(resolver, uri)?.use { input ->
             val buf = ByteArray(2048)
             val n = input.read(buf)
             if (n <= 0) return true

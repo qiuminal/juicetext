@@ -84,6 +84,7 @@
     <string name="low_memory_features_disabled">Low memory: some features were disabled (syntax highlight, diagnostics, auto-completion).</string>
     <string name="editor_runtime_recovered">An editor error occurred. Some features were disabled to keep the app responsive.</string>
     <string name="open_file">Open</string>
-    <string name="open_file_saf">Open (SAF)</string>
+    <string name="all_files_access_message">Allow access to manage all files in system settings.</string>
+    <string name="use_this_folder">Use this folder</string>
     <string name="close_tab">Close tab</string>
 </resources>

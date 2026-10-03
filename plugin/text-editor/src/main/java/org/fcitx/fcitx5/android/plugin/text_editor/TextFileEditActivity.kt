@@ -112,28 +112,6 @@ class TextFileEditActivity : AppCompatActivity() {
     private fun activeEditor(): ArrowTabCodeEditor = tabs[activeTabIndex].editor!!
     private fun activeTab(): EditorTab = tabs[activeTabIndex]
 
-    private val openFilePicker = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri == null) return@registerForActivityResult
-        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-        try {
-            contentResolver.takePersistableUriPermission(uri, flags)
-        } catch (_: SecurityException) {
-        }
-        lifecycleScope.launch(crashHandler) {
-            val metadata = withContext(Dispatchers.IO) {
-                val doc = DocumentFile.fromSingleUri(this@TextFileEditActivity, uri)
-                Triple(
-                    doc?.name ?: uri.lastPathSegment ?: "?",
-                    doc?.type ?: contentResolver.getType(uri),
-                    doc?.length() ?: -1L,
-                )
-            }
-            openInNewTab(uri, metadata.first, metadata.second, metadata.third)
-        }
-    }
-
     private val browseFilePicker = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -346,13 +324,6 @@ class TextFileEditActivity : AppCompatActivity() {
                 true
             }
         }
-        menu.add(R.string.open_file_saf).apply {
-            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-            setOnMenuItemClickListener {
-                openFilePicker.launch(arrayOf("*/*"))
-                true
-            }
-        }
         saveItem = null
         undoItem = null
         redoItem = null
@@ -447,7 +418,8 @@ class TextFileEditActivity : AppCompatActivity() {
     }
 
     private fun readFileSnapshot(uri: Uri): ExternalFileSnapshot {
-        val doc = DocumentFile.fromSingleUri(this, uri)
+        val doc = if (uri.scheme == "file") DocumentFile.fromFile(File(uri.path!!))
+            else DocumentFile.fromSingleUri(this, uri)
         return ExternalFileSnapshot(
             lastModified = doc?.lastModified() ?: 0L,
             size = doc?.length() ?: -1L,
@@ -558,7 +530,7 @@ class TextFileEditActivity : AppCompatActivity() {
         lifecycleScope.launch(crashHandler) {
             val original = try {
                 withContext(Dispatchers.IO) {
-                    contentResolver.openInputStream(docUri)?.use {
+                    TextFileSupport.openInputStream(contentResolver, docUri)?.use {
                         it.readBytes().decodeToString()
                     } ?: error("openInputStream returned null")
                 }
@@ -1002,7 +974,7 @@ class TextFileEditActivity : AppCompatActivity() {
             }
             val original = try {
                 withContext(Dispatchers.IO) {
-                    contentResolver.openInputStream(targetUri)?.use {
+                    TextFileSupport.openInputStream(contentResolver, targetUri)?.use {
                         it.readBytes().decodeToString()
                     } ?: error("openInputStream returned null")
                 }
@@ -1163,7 +1135,7 @@ class TextFileEditActivity : AppCompatActivity() {
                 withContext(Dispatchers.IO) {
                     // "wt" = truncate-and-write. Without 't', some providers append rather than
                     // overwrite, leaving stale tail bytes when the new content is shorter.
-                    contentResolver.openOutputStream(targetUri, "wt")?.use {
+                    TextFileSupport.openOutputStream(contentResolver, targetUri)?.use {
                         it.write(content.toByteArray())
                     } ?: error("openOutputStream returned null")
                     runCatching { draftFileForUri(targetUri).delete() }
@@ -1202,7 +1174,7 @@ class TextFileEditActivity : AppCompatActivity() {
                 val savedVersion = tab.editGeneration
                 val content = activeEditor().text.toString()
                 val resolvedName = withContext(Dispatchers.IO) {
-                    contentResolver.openOutputStream(uri, "wt")?.use {
+                    TextFileSupport.openOutputStream(contentResolver, uri)?.use {
                         it.write(content.toByteArray())
                     } ?: error("openOutputStream returned null")
                     DocumentFile.fromSingleUri(this@TextFileEditActivity, uri)?.name
@@ -1418,7 +1390,9 @@ class TextFileEditActivity : AppCompatActivity() {
 
         private fun openMappedSource(): Boolean {
             return try {
-                val descriptor = context.contentResolver.openFileDescriptor(uri, "r") ?: return false
+                val descriptor = if (uri.scheme == "file") {
+                    ParcelFileDescriptor.open(File(uri.path!!), ParcelFileDescriptor.MODE_READ_ONLY)
+                } else context.contentResolver.openFileDescriptor(uri, "r") ?: return false
                 val fileChannel = FileInputStream(descriptor.fileDescriptor).channel
                 mappedSize = fileChannel.size()
                 pfd = descriptor
@@ -1436,7 +1410,7 @@ class TextFileEditActivity : AppCompatActivity() {
 
         private fun openStreamSource() {
             stream = BufferedInputStream(
-                context.contentResolver.openInputStream(uri)
+                TextFileSupport.openInputStream(context.contentResolver, uri)
                     ?: error("openInputStream returned null")
             )
             sourceExhausted = false

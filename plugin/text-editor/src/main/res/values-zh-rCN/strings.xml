@@ -84,6 +84,7 @@
     <string name="low_memory_features_disabled">内存不足：已关闭部分功能（语法高亮、诊断、自动补全）。</string>
     <string name="editor_runtime_recovered">编辑器发生异常，已自动降级部分功能以保持可用。</string>
     <string name="open_file">打开</string>
-    <string name="open_file_saf">打开(SAF)</string>
+    <string name="all_files_access_message">请在系统设置中允许访问和管理所有文件。</string>
+    <string name="use_this_folder">使用此文件夹</string>
     <string name="close_tab">关闭标签页</string>
 </resources>

@@ -5,10 +5,16 @@
 package org.fcitx.fcitx5.android.plugin.text_editor
 
 import android.content.Context
+import android.Manifest
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
+import android.os.Build
+import android.os.Environment
+import android.provider.Settings
+import java.io.File
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
@@ -79,40 +85,18 @@ class FileBrowserActivity : AppCompatActivity() {
         val parent: DocumentFile?
     )
 
-    private val pickTree = registerForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
-    ) { uri ->
-        if (uri == null) {
-            if (rootTree == null) {
-                toast(getString(R.string.grant_access_denied))
-                showGrantState()
-            }
-            return@registerForActivityResult
-        }
-        lifecycleScope.launch {
-            persistTreePermission(uri)
-            prefs.edit().putString(PREF_TREE_URI, uri.toString()).apply()
-            openTree(uri)
+    private val pickingDirectory get() = intent.getBooleanExtra(EXTRA_PICK_DIRECTORY, false)
+    private val pickDirectory = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val path = result.data?.data?.path
+        if (result.resultCode == RESULT_OK && path != null) {
+            prefs.edit().putString(PREF_ROOT_PATH, path).remove(PREF_ROOT_SNAPSHOT).apply()
+            directorySnapshots.clear()
+            restoredPath = null
+            openTree(Uri.fromFile(File(path)))
         }
     }
-
-    private val pickFile = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri == null) return@registerForActivityResult
-        fileOpenJob?.cancel()
-        fileOpenJob = lifecycleScope.launch {
-            val metadata = withContext(Dispatchers.IO) {
-                persistUriPermission(uri)
-                val doc = DocumentFile.fromSingleUri(this@FileBrowserActivity, uri)
-                Triple(
-                    doc?.name ?: uri.lastPathSegment ?: "?",
-                    doc?.type ?: contentResolver.getType(uri),
-                    doc?.length() ?: -1L
-                )
-            }
-            openFileUri(uri, metadata.first, metadata.second, metadata.third)
-        }
+    private val requestLegacyWrite = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        ensureStorageAccess()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -169,8 +153,12 @@ class FileBrowserActivity : AppCompatActivity() {
         })
 
         showColdStartSurface()
-        restoreCachedRootSnapshot()
-        lifecycleScope.launch { restorePersistedTree() }
+        ensureStorageAccess()
+        if (storageRequirement() != StorageAccessRequirement.NONE &&
+            !prefs.getBoolean(PREF_STORAGE_PROMPTED, false)) {
+            prefs.edit().putBoolean(PREF_STORAGE_PROMPTED, true).apply()
+            requestStorageAccess()
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -180,6 +168,7 @@ class FileBrowserActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        ensureStorageAccess()
         // onCreate is followed by onResume, so refresh only after we explicitly launched the editor.
         if (refreshOnResume) {
             refreshOnResume = false
@@ -212,21 +201,19 @@ class FileBrowserActivity : AppCompatActivity() {
                 true
             }
         }
-        menu.add(R.string.change_root_folder).apply {
+        menu.add(if (pickingDirectory) R.string.use_this_folder else R.string.change_root_folder).apply {
             setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
             setOnMenuItemClickListener {
-                launchPicker()
+                if (pickingDirectory) {
+                    currentDir?.let { setResult(RESULT_OK, Intent().setData(it.uri)); finish() }
+                } else if (storageRequirement() == StorageAccessRequirement.NONE) {
+                    pickDirectory.launch(Intent(this@FileBrowserActivity, FileBrowserActivity::class.java)
+                        .putExtra(EXTRA_PICK_DIRECTORY, true))
+                } else requestStorageAccess()
                 true
             }
         }
-        menu.add(R.string.open_single_file).apply {
-            setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
-            setOnMenuItemClickListener {
-                pickFile.launch(arrayOf("*/*"))
-                true
-            }
-        }
-        menu.add(R.string.new_text_file).apply {
+        if (!pickingDirectory) menu.add(R.string.new_text_file).apply {
             setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
             setOnMenuItemClickListener {
                 createNewTextFile()
@@ -237,14 +224,15 @@ class FileBrowserActivity : AppCompatActivity() {
     }
 
     private fun restoreCachedRootSnapshot() {
-        val rootUri = prefs.getString(PREF_TREE_URI, null) ?: return
+        if (pickingDirectory) return
+        val rootUri = prefs.getString(PREF_ROOT_PATH, null) ?: return
         val encoded = prefs.getString(PREF_ROOT_SNAPSHOT, null) ?: return
         val cached = runCatching { DirectorySnapshotCodec.decode(encoded, rootUri) }.getOrNull() ?: return
         if (cached.isEmpty()) return
         val restored = cached.mapNotNull { item ->
             runCatching {
                 Entry(
-                    doc = DocumentFile.fromSingleUri(this, Uri.parse(item.uri)) ?: return@mapNotNull null,
+                    doc = DocumentFile.fromFile(File(Uri.parse(item.uri).path ?: return@mapNotNull null)),
                     name = item.name,
                     mimeType = item.mimeType,
                     size = item.size,
@@ -281,41 +269,32 @@ class FileBrowserActivity : AppCompatActivity() {
                 )
             }
             .toList()
-        val cacheRootUri = prefs.getString(PREF_TREE_URI, null) ?: root.uri.toString()
+        if (pickingDirectory) return
+        val cacheRootUri = prefs.getString(PREF_ROOT_PATH, null) ?: root.uri.path.orEmpty()
         prefs.edit().putString(
             PREF_ROOT_SNAPSHOT,
             DirectorySnapshotCodec.encode(cacheRootUri, snapshot),
         ).apply()
     }
 
-    private suspend fun restorePersistedTree() {
-        val saved = prefs.getString(PREF_TREE_URI, null)?.let(Uri::parse)
-        val persistedOk = saved != null && withContext(Dispatchers.IO) {
-            contentResolver.persistedUriPermissions.any {
-                it.uri == saved && it.isReadPermission && it.isWritePermission
-            }
-        }
-        if (saved != null && persistedOk) {
-            openTree(saved)
-        } else {
-            showGrantStateAndPick()
-        }
-    }
+    private fun storageRequirement() = StorageAccessPolicy.requirement(
+        Build.VERSION.SDK_INT,
+        Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager(),
+        checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED,
+    )
 
-    private suspend fun persistTreePermission(uri: Uri) = withContext(Dispatchers.IO) {
-        persistUriPermission(uri)
-    }
-
-    private fun persistUriPermission(uri: Uri) {
-        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-        try {
-            contentResolver.takePersistableUriPermission(uri, flags)
-        } catch (_: SecurityException) {
-            // Some providers don't allow persisting; the transient grant remains usable.
+    private fun ensureStorageAccess() {
+        if (storageRequirement() != StorageAccessRequirement.NONE) {
+            showGrantState()
+        } else if (rootTree == null && directoryJob == null) {
+            restoreCachedRootSnapshot()
+            val defaultPath = Environment.getExternalStorageDirectory().absolutePath
+            val path = if (pickingDirectory) defaultPath else prefs.getString(PREF_ROOT_PATH, defaultPath)!!
+            openTree(Uri.fromFile(File(path)))
         }
     }
 
-    private fun showGrantStateAndPick() {
+    private fun showGrantState() {
         cancelDirectoryLoad()
         rootTree = null
         currentDir = null
@@ -323,19 +302,23 @@ class FileBrowserActivity : AppCompatActivity() {
         currentPath = ""
         binding.pathBar.text = ""
         replaceEntries(emptyList())
-        showState(getString(R.string.grant_access_message)) { launchPicker() }
-        launchPicker()
+        showState(getString(R.string.all_files_access_message)) { requestStorageAccess() }
     }
 
-    private fun showGrantState() {
-        showState(getString(R.string.grant_access_message)) { launchPicker() }
-    }
-
-    private fun launchPicker() {
+    private fun requestStorageAccess() {
+        if (Build.VERSION.SDK_INT < 30) {
+            requestLegacyWrite.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            return
+        }
         try {
-            pickTree.launch(null)
+            startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                Uri.parse("package:$packageName")))
         } catch (_: Exception) {
-            showGrantState()
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+            } catch (_: Exception) {
+                showGrantState()
+            }
         }
     }
 
@@ -346,21 +329,24 @@ class FileBrowserActivity : AppCompatActivity() {
         directoryJob = lifecycleScope.launch {
             val root = try {
                 withContext(Dispatchers.IO) {
-                    DocumentFile.fromTreeUri(this@FileBrowserActivity, uri)
-                        ?.takeIf { it.canRead() }
+                    DocumentFile.fromFile(File(uri.path!!))
+                        .takeIf { it.isDirectory && it.canRead() }
                 }
             } catch (_: Exception) {
                 null
             }
             if (generation != directoryGeneration) return@launch
             if (root == null) {
-                prefs.edit().remove(PREF_TREE_URI).apply()
-                showGrantStateAndPick()
+                directoryJob = null
+                showState(getString(R.string.folder_load_failed)) {
+                    prefs.edit().remove(PREF_ROOT_PATH).apply()
+                    ensureStorageAccess()
+                }
                 return@launch
             }
             rootTree = root
             directoryJob = null
-            val persistedUri = prefs.getString(PREF_TREE_URI, null)
+            val persistedUri = prefs.getString(PREF_ROOT_PATH, null)
             val cachedResult = persistedUri?.let(directorySnapshots::get)
             if (cachedResult != null) directorySnapshots[root.uri.toString()] = cachedResult
             val restorePath = restoredPath
@@ -452,9 +438,12 @@ class FileBrowserActivity : AppCompatActivity() {
         val parent = if (dir.uri == root.uri) {
             null
         } else {
-            dir.parentFile?.takeIf { isInsideRoot(it, root) } ?: root
+            File(dir.uri.path!!).parentFile?.let(DocumentFile::fromFile)
+                ?.takeIf { isInsideRoot(it, root) } ?: root
         }
-        val children = dir.listFiles().map { child ->
+        val children = (File(dir.uri.path!!).listFiles()
+            ?: throw java.io.IOException("Cannot list ${dir.uri.path}"))
+            .map(DocumentFile::fromFile).map { child ->
             currentCoroutineContext().ensureActive()
             val isDirectory = child.isDirectory
             Entry(
@@ -500,12 +489,9 @@ class FileBrowserActivity : AppCompatActivity() {
 
     /** Called only from Dispatchers.IO. */
     private fun isInsideRoot(file: DocumentFile, root: DocumentFile): Boolean {
-        var node: DocumentFile? = file
-        while (node != null) {
-            if (node.uri == root.uri) return true
-            node = node.parentFile
-        }
-        return false
+        val base = File(root.uri.path!!).canonicalPath
+        val path = File(file.uri.path!!).canonicalPath
+        return path == base || path.startsWith(base.trimEnd('/') + "/")
     }
 
     private fun refreshCurrentDirectory(showProgress: Boolean = true) {
@@ -576,6 +562,7 @@ class FileBrowserActivity : AppCompatActivity() {
             navigateTo(entry.doc, targetPath, backgroundRefresh = true)
             return
         }
+        if (pickingDirectory) return
         fileOpenJob?.cancel()
         fileOpenJob = lifecycleScope.launch {
             openFileUri(entry.doc.uri, entry.name, entry.mimeType, entry.size)
@@ -598,7 +585,8 @@ class FileBrowserActivity : AppCompatActivity() {
         fileOpenJob = lifecycleScope.launch {
             val created = withContext(Dispatchers.IO) {
                 try {
-                    dir.createFile("text/plain", fileName)
+                    File(File(dir.uri.path!!), fileName).takeIf { it.createNewFile() }
+                        ?.let(DocumentFile::fromFile)
                 } catch (_: Exception) {
                     null
                 }
@@ -676,7 +664,7 @@ class FileBrowserActivity : AppCompatActivity() {
     }
 
     private fun onEntryLongClick(entry: Entry): Boolean {
-        if (entry.isParent) return false
+        if (entry.isParent || pickingDirectory) return false
         val items = arrayOf(getString(R.string.rename), getString(R.string.delete))
         AlertDialog.Builder(this)
             .setTitle(entry.name)
@@ -707,11 +695,13 @@ class FileBrowserActivity : AppCompatActivity() {
             .setView(container)
             .setPositiveButton(android.R.string.ok) { _, _ ->
                 val newName = editText.text.toString().trim()
-                if (newName.isEmpty() || newName == currentName) return@setPositiveButton
+                if (newName.isEmpty() || newName == currentName || newName == "." ||
+                    newName == ".." || '/' in newName) return@setPositiveButton
                 lifecycleScope.launch {
                     val ok = withContext(Dispatchers.IO) {
                         try {
-                            doc.renameTo(newName)
+                            val target = File(File(doc.uri.path!!).parentFile, newName)
+                            !target.exists() && doc.renameTo(newName)
                         } catch (_: Exception) {
                             false
                         }
@@ -738,7 +728,7 @@ class FileBrowserActivity : AppCompatActivity() {
                 lifecycleScope.launch {
                     val ok = withContext(Dispatchers.IO) {
                         try {
-                            doc.delete()
+                            File(doc.uri.path!!).deleteRecursively()
                         } catch (_: Exception) {
                             false
                         }
@@ -852,7 +842,9 @@ class FileBrowserActivity : AppCompatActivity() {
         private const val STATE_CURRENT_PATH = "current_path"
         private const val RECENT_EDIT_PREFS = "recent_edit_transient"
         private const val PREFS_NAME = "text_editor"
-        private const val PREF_TREE_URI = "tree_uri"
+        private const val PREF_ROOT_PATH = "root_path"
+        private const val PREF_STORAGE_PROMPTED = "storage_prompted"
+        private const val EXTRA_PICK_DIRECTORY = "pick_directory"
         private const val PREF_ROOT_SNAPSHOT = "root_directory_snapshot_v1"
         private const val MAX_SESSION_DIRECTORY_SNAPSHOTS = 32
         private const val UNSUPPORTED_TOAST_DURATION_MS = 600L

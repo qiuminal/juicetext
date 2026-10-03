@@ -83,6 +83,7 @@
     <string name="low_memory_features_disabled">記憶體不足：已關閉部分功能（語法高亮、診斷、自動補全）。</string>
     <string name="editor_runtime_recovered">編輯器發生異常，已自動降級部分功能以保持可用。</string>
     <string name="open_file">開啟</string>
-    <string name="open_file_saf">開啟(SAF)</string>
+    <string name="all_files_access_message">請於系統設定中允許存取和管理所有檔案。</string>
+    <string name="use_this_folder">使用此資料夾</string>
     <string name="close_tab">關閉分頁</string>
 </resources>
