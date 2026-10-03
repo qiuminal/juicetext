@@ -70,7 +70,7 @@ This is a long-lived project. Every releasable source state must be committed an
 - Keep one logical change per commit.
 - Tag immutable releases as `v<versionName>`.
 - Increase both `versionName` and Android `versionCode` for every installable update.
-- Push release source and annotated tags to this repository for every release, and publish APKs and checksums through GitHub Releases.
+- Push release source and annotated tags to this repository for every release, and publish signed APKs through GitHub Releases.
 - Production releases must keep package `com.qiuminal.juicetext` and the same long-term signing certificate.
 - Never commit the signing key, passwords, local SDK paths, APKs, or generated build output.
 

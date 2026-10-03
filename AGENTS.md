@@ -20,4 +20,5 @@ addition to `RELEASING.md`, which is the authoritative release checklist.
 - Always follow `RELEASING.md`.
 - Never commit APKs, keystores, credentials, `local.properties`, or build output.
 - Every release needs one immutable commit, one annotated `vX.Y.Z` tag, the pushed
-  tag, and a GitHub Release with the signed APK and `SHA256SUMS`.
+  tag, and a GitHub Release with the signed APK. GitHub shows each asset's SHA-256
+  digest, so never upload a separate `SHA256SUMS`/checksum file.

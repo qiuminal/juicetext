@@ -46,7 +46,7 @@ Verify all of the following:
 6. No Fcitx plugin metadata, plugin manifest action, delete-packages permission, or Fcitx package query is present.
 7. Core editor and TextMate assets are packaged.
 8. Changed behavior is tested on a connected Android device and relevant logcat output is reviewed.
-9. APK SHA-256 and release metadata are archived outside Git.
+9. APK SHA-256 and release metadata are recorded in the offline archive outside Git.
 
 ## Publishing
 
@@ -55,7 +55,7 @@ Verify all of the following:
 3. Commit the release source state on `main`.
 4. Create an annotated immutable `vX.Y.Z` tag.
 5. Push `main` and the tag.
-6. Create a GitHub Release for the tag and attach the verified APK plus checksums, using the notes format below.
+6. Create a GitHub Release for the tag and attach the verified APK, using the notes format below. GitHub displays a SHA-256 digest for every asset, so do not upload a separate checksum file.
 7. Never commit APK files, keystores, credentials, `local.properties`, or build directories.
 
 ## Release notes format
@@ -91,7 +91,9 @@ Rules:
 - Keep the `## 安装` section with the exact APK filename, minimum Android version,
   package name, versionCode, and upgrade path.
 - Write the notes in Chinese, matching the existing releases.
+- Do not attach a separate checksum file (such as `SHA256SUMS`). GitHub shows the
+  SHA-256 digest for every asset; records belong in the offline archive only.
 - Save the same file as `release-notes.md` in the offline archive directory for the
   version, and pass it to `gh release create`/`gh release edit` with `--notes-file`.
 
-Every future release must be published in this repository with its source commit, annotated tag, signed APK, and checksum file. A locally distributed APK alone does not complete a release.
+Every future release must be published in this repository with its source commit, annotated tag, and signed APK. A locally distributed APK alone does not complete a release.
