@@ -55,7 +55,43 @@ Verify all of the following:
 3. Commit the release source state on `main`.
 4. Create an annotated immutable `vX.Y.Z` tag.
 5. Push `main` and the tag.
-6. Create a GitHub Release for the tag and attach the verified APK plus checksums.
+6. Create a GitHub Release for the tag and attach the verified APK plus checksums, using the notes format below.
 7. Never commit APK files, keystores, credentials, `local.properties`, or build directories.
+
+## Release notes format
+
+GitHub renders the release `name` (set with `--title`) as the page heading, so the
+notes body must never repeat the release name or version as a heading. Set the
+title to `juicetext X.Y.Z` and start the body with `## 更新内容`.
+
+Required structure:
+
+```text
+## 更新内容
+
+- <user-visible change>
+- ...
+
+## 安装
+
+<download and install paragraph: APK filename, minimum Android version, package
+name, versionCode, and which previous release it can upgrade>
+
+## 验证            (optional)
+
+<validation summary>
+```
+
+Rules:
+
+- The first body line must be `## 更新内容`. Never start with `# juicetext X.Y.Z`,
+  `## juicetext ... X.Y.Z`, or any heading that duplicates the release title.
+- `--title` is the only place the release name/version appears as a title.
+- Use `##` for section headings; do not use `#` in the notes body.
+- Keep the `## 安装` section with the exact APK filename, minimum Android version,
+  package name, versionCode, and upgrade path.
+- Write the notes in Chinese, matching the existing releases.
+- Save the same file as `release-notes.md` in the offline archive directory for the
+  version, and pass it to `gh release create`/`gh release edit` with `--notes-file`.
 
 Every future release must be published in this repository with its source commit, annotated tag, signed APK, and checksum file. A locally distributed APK alone does not complete a release.
