@@ -23,6 +23,7 @@ main
 - A lower versionCode cannot replace a newer installed APK without uninstalling it.
 - Production application ID and signing certificate must remain unchanged.
 - Development builds may use descriptive version names, but they are not release tags.
+- Update `build-logic/convention/src/main/kotlin/Versions.kt` and `buildVersionName` in `gradle.properties` together; the latter keeps APK and build-metadata versions identical to the release version.
 
 ## Signing rules
 
@@ -56,3 +57,5 @@ Verify all of the following:
 5. Push `main` and the tag.
 6. Create a GitHub Release for the tag and attach the verified APK plus checksums.
 7. Never commit APK files, keystores, credentials, `local.properties`, or build directories.
+
+Every future release must be published in this repository with its source commit, annotated tag, signed APK, and checksum file. A locally distributed APK alone does not complete a release.

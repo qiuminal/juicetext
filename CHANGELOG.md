@@ -4,13 +4,19 @@ All notable changes to juicetext are recorded here. Release tags use the format 
 
 ## Unreleased
 
+## [0.3.2] - 2026-10-03
+
+- Request all-files access on first launch, browse shared storage directly, and replace SAF opening and root selection with the built-in file browser.
+
 - Added a "New text file" action to the file-browser menu that creates a `.txt` in the current folder and opens it for editing.
 - Added a selection dialog for the default editor text size.
 - Treat Pinch text-size changes as session-local: merely visiting editor options no longer overwrites the temporary size; choosing a size explicitly still applies the new default.
 - Added per-tab URI-bound draft loading and fixed new tabs inheriting another tab's unsaved state.
 - Added stable directory snapshots, file icons and metadata, external-change detection, manual light/dark theme selection, and paged large-file loading with TextMate syntax highlighting.
-- Known limitation: syntax colors for a large file can appear about two seconds after its text becomes visible; reducing this initial TextMate latency is deferred to a later fix.
-- Added focused unit coverage for editor state and text-size override behavior.
+- Reduced initial syntax-highlighting delay for large files by analyzing a compact initial page before publishing colors.
+- Improved YAML key and unquoted-string colors in light and dark themes and disabled costly identifier collection.
+- Fixed syntax highlighting disappearing after backgrounding and returning to the editor: system UI-hidden trim callbacks are no longer treated as low-memory conditions.
+- Added focused unit coverage for editor state, trim policy, and text-size override behavior.
 
 ## [0.3.0] - 2026-09-09
 

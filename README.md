@@ -10,7 +10,11 @@ Independent Android text editor derived from the Fcitx5 Android text-editor plug
 
 ## Current development state
 
-The current development build includes the validated editor-size behavior:
+Current release: **0.3.2**. Download signed APKs from [GitHub Releases](https://github.com/qiuminal/juicetext/releases).
+
+- Shared storage is browsed directly after granting all-files access; root folders are selected inside the app.
+- Large text files use paged loading with TextMate highlighting and optimized YAML colors.
+- Returning from the background preserves syntax highlighting.
 
 - Pinch zoom changes text size only for the current editor session.
 - Opening editor options and returning without choosing a size preserves the Pinch size.
@@ -46,7 +50,7 @@ This is a long-lived project. Every releasable source state must be committed an
 - Keep one logical change per commit.
 - Tag immutable releases as `v<versionName>`.
 - Increase both `versionName` and Android `versionCode` for every installable update.
-- Archive release APKs outside Git and publish them through GitHub Releases.
+- Push release source and annotated tags to this repository for every release, and publish APKs and checksums through GitHub Releases.
 - Production releases must keep package `com.qiuminal.juicetext` and the same long-term signing certificate.
 - Never commit the signing key, passwords, local SDK paths, APKs, or generated build output.
 
