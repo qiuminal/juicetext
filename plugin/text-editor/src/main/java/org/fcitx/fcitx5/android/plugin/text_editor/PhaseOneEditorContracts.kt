@@ -294,3 +294,32 @@ internal object TextFileClassifier {
     fun sniff(sample: ByteArray): TextFileVerdict =
         if (sample.any { it == 0.toByte() }) TextFileVerdict.BINARY else TextFileVerdict.TEXT
 }
+
+/**
+ * Maps Android ComponentCallbacks2 trim levels to editor feature decisions.
+ *
+ * TRIM_MEMORY_UI_HIDDEN (20) reports that the UI left the screen — it is delivered every time
+ * the app is moved to the background, and sits numerically above TRIM_MEMORY_RUNNING_LOW (10).
+ * Treating it as genuine memory pressure swapped every active tab to plain text and permanently
+ * stripped syntax highlighting upon return.
+ */
+internal object LowMemoryPolicy {
+    const val TRIM_MEMORY_RUNNING_MODERATE = 5
+    const val TRIM_MEMORY_RUNNING_LOW = 10
+    const val TRIM_MEMORY_RUNNING_CRITICAL = 15
+    const val TRIM_MEMORY_UI_HIDDEN = 20
+    const val TRIM_MEMORY_BACKGROUND = 40
+    const val TRIM_MEMORY_MODERATE = 60
+    const val TRIM_MEMORY_COMPLETE = 80
+
+    fun shouldDegrade(level: Int): Boolean =
+        level != TRIM_MEMORY_UI_HIDDEN && level >= TRIM_MEMORY_RUNNING_LOW
+
+    /**
+     * Trim levels delivered to a backgrounded process (>= 40) describe a hidden app whose
+     * memory pressure signal no longer applies when the user brings juicetext back to the
+     * foreground.
+     */
+    fun shouldRestoreOnResume(degradedAtLevel: Int): Boolean =
+        degradedAtLevel >= TRIM_MEMORY_BACKGROUND
+}

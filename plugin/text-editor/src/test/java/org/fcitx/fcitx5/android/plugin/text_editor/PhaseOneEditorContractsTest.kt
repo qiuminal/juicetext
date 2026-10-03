@@ -336,4 +336,25 @@ class PhaseOneEditorContractsTest {
         }
         policy.checkCallAllowed(currentThreadId = mainThreadId + 1)
     }
+
+    @Test
+    fun `hiding the UI does not disable syntax highlighting`() {
+        assertFalse(LowMemoryPolicy.shouldDegrade(LowMemoryPolicy.TRIM_MEMORY_UI_HIDDEN))
+        assertFalse(LowMemoryPolicy.shouldDegrade(LowMemoryPolicy.TRIM_MEMORY_RUNNING_MODERATE))
+        assertTrue(LowMemoryPolicy.shouldDegrade(LowMemoryPolicy.TRIM_MEMORY_RUNNING_LOW))
+        assertTrue(LowMemoryPolicy.shouldDegrade(LowMemoryPolicy.TRIM_MEMORY_RUNNING_CRITICAL))
+        assertTrue(LowMemoryPolicy.shouldDegrade(LowMemoryPolicy.TRIM_MEMORY_BACKGROUND))
+        assertTrue(LowMemoryPolicy.shouldDegrade(LowMemoryPolicy.TRIM_MEMORY_MODERATE))
+        assertTrue(LowMemoryPolicy.shouldDegrade(LowMemoryPolicy.TRIM_MEMORY_COMPLETE))
+    }
+
+    @Test
+    fun `background trims are undone when the editor returns to the foreground`() {
+        assertTrue(LowMemoryPolicy.shouldRestoreOnResume(LowMemoryPolicy.TRIM_MEMORY_BACKGROUND))
+        assertTrue(LowMemoryPolicy.shouldRestoreOnResume(LowMemoryPolicy.TRIM_MEMORY_MODERATE))
+        assertTrue(LowMemoryPolicy.shouldRestoreOnResume(LowMemoryPolicy.TRIM_MEMORY_COMPLETE))
+        assertFalse(LowMemoryPolicy.shouldRestoreOnResume(LowMemoryPolicy.TRIM_MEMORY_RUNNING_LOW))
+        assertFalse(LowMemoryPolicy.shouldRestoreOnResume(LowMemoryPolicy.TRIM_MEMORY_RUNNING_CRITICAL))
+        assertFalse(LowMemoryPolicy.shouldRestoreOnResume(0))
+    }
 }

@@ -91,6 +91,7 @@ class TextFileEditActivity : AppCompatActivity() {
     private var observedTextSizeChangeId: Long = 0L
     private var lowMemoryMode: Boolean = false
     private var lowMemoryNoticeShown: Boolean = false
+    private var lowMemoryDegradedAtLevel: Int = 0
     private val largeFilePagerMutex = Mutex()
     private lateinit var sharedColorScheme: EditorColorScheme
     private val crashHandler = CoroutineExceptionHandler { _, throwable ->
@@ -327,7 +328,7 @@ class TextFileEditActivity : AppCompatActivity() {
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+        if (LowMemoryPolicy.shouldDegrade(level)) {
             enterLowMemoryMode(level)
         }
     }
@@ -421,6 +422,7 @@ class TextFileEditActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if (!::binding.isInitialized) return
+        maybeRestoreFromLowMemoryMode()
         val newTabWidth = readTabWidth()
         val textSizeChangeId = prefs.getLong(EditorOptionsActivity.PREF_TEXT_SIZE_CHANGE_ID, 0L)
         val shouldApplyDefaultTextSize = EditorOptionsActivity.shouldApplyDefaultTextSize(
@@ -1294,15 +1296,17 @@ class TextFileEditActivity : AppCompatActivity() {
     private fun enterLowMemoryMode(level: Int) {
         if (!::binding.isInitialized || lowMemoryMode) return
         lowMemoryMode = true
+        lowMemoryDegradedAtLevel = level
         runCatching {
-            activeEditor().apply {
-                setStyles(null)
-                setDiagnostics(null)
-                setEditorLanguage(TextMateSetup.createLanguage(null, assets, useTab))
-                installOnlineBracketsMatcher()
-                getComponent(EditorAutoCompletion::class.java).isEnabled = false
-                props.cacheRenderNodeForLongLines = false
-                props.disallowSuggestions = true
+            tabs.forEach { tab ->
+                val editor = tab.editor ?: return@forEach
+                editor.setStyles(null)
+                editor.setDiagnostics(null)
+                editor.setEditorLanguage(TextMateSetup.createLanguage(null, assets, useTab))
+                editor.installOnlineBracketsMatcher()
+                editor.getComponent(EditorAutoCompletion::class.java).isEnabled = false
+                editor.props.cacheRenderNodeForLongLines = false
+                editor.props.disallowSuggestions = true
             }
             if (!lowMemoryNoticeShown) {
                 lowMemoryNoticeShown = true
@@ -1311,6 +1315,32 @@ class TextFileEditActivity : AppCompatActivity() {
             Timber.w("Entered low memory mode, level=$level")
         }.onFailure {
             Timber.e(it, "Failed to degrade editor on low memory")
+        }
+    }
+
+    private fun maybeRestoreFromLowMemoryMode() {
+        if (!lowMemoryMode || !::binding.isInitialized) return
+        if (!LowMemoryPolicy.shouldRestoreOnResume(lowMemoryDegradedAtLevel)) return
+        lowMemoryMode = false
+        lowMemoryDegradedAtLevel = 0
+        runCatching {
+            tabs.forEach { tab ->
+                val editor = tab.editor ?: return@forEach
+                editor.props.cacheRenderNodeForLongLines = !tab.isLargeFile
+                editor.getComponent(EditorAutoCompletion::class.java).isEnabled = !tab.isLargeFile
+                if (tab.isLargeFile) {
+                    editor.setHighlightCurrentBlock(false)
+                    editor.setHighlightCurrentLine(false)
+                    editor.setHighlightBracketPair(false)
+                    editor.setDiagnostics(null)
+                }
+                applyEditorLanguage(editor, tab)
+                editor.installOnlineBracketsMatcher()
+            }
+            updateMenuState(refreshTab = true)
+            Timber.i("Restored editor features after returning to the foreground")
+        }.onFailure {
+            Timber.e(it, "Failed to restore editor features on low memory exit")
         }
     }
 
