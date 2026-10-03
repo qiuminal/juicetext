@@ -16,13 +16,24 @@ object TextFileSupport {
 
     // Files above this size use a lower-overhead editor configuration (no wrapping/autocomplete),
     // but supported TextMate syntax highlighting remains enabled.
-    const val LARGE_FILE_THRESHOLD: Long = 10L * 1024 * 1024 // 10 MB
+    // 5 MB captures standard word dictionaries and large YAML code tables (e.g. 300k+ line Rime
+    // dicts are often 6MB-9MB) so they enter paged loading rather than parsing the entire buffer.
+    const val LARGE_FILE_THRESHOLD: Long = 5L * 1024 * 1024 // 5 MB
     const val LARGE_FILE_PAGE_BYTES: Int = 1024 * 1024 // 1 MB
+
+    // The first page is tokenized in full before TextMate publishes any style, so it bounds how
+    // long an opened file shows as plain text. Keep it small; later pages are appended and
+    // analyzed incrementally while their content is off-screen.
+    const val LARGE_FILE_FIRST_PAGE_BYTES: Int = 128 * 1024 // 128 KB
 
     fun isLargeFile(bytes: Long): Boolean = bytes >= LARGE_FILE_THRESHOLD
 
+    // Bytes to load before the first highlight pass runs. A size <= 0 means the caller has not read
+    // the file snapshot yet — which is exactly the large-file first page — so bound it too rather
+    // than asking the pager for nothing.
     fun largeFileInitialPageBytes(fileSize: Long): Int =
-        minOf(fileSize.coerceAtLeast(0L), LARGE_FILE_PAGE_BYTES.toLong()).toInt()
+        if (fileSize <= 0L) LARGE_FILE_FIRST_PAGE_BYTES
+        else minOf(fileSize, LARGE_FILE_FIRST_PAGE_BYTES.toLong()).toInt()
 
     private val KNOWN_TEXT_EXTENSIONS = setOf(
         "txt", "md", "markdown", "rst", "log",

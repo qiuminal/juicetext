@@ -120,11 +120,14 @@ class PhaseOneEditorContractsTest {
         assertTrue(TextFileSupport.isLargeFile(size))
         assertEquals("source.yaml", TextFileSupport.detectScopeName("PY_c.dict.yaml"))
         assertEquals(
-            TextFileSupport.LARGE_FILE_PAGE_BYTES,
+            TextFileSupport.LARGE_FILE_FIRST_PAGE_BYTES,
             TextFileSupport.largeFileInitialPageBytes(size),
         )
         assertEquals(151, TextFileSupport.largeFileInitialPageBytes(151))
-        assertEquals(0, TextFileSupport.largeFileInitialPageBytes(-1))
+        assertEquals(
+            TextFileSupport.LARGE_FILE_FIRST_PAGE_BYTES,
+            TextFileSupport.largeFileInitialPageBytes(-1),
+        )
     }
 
     @Test

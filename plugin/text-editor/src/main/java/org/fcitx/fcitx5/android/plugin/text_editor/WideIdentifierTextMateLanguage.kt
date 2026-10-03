@@ -92,12 +92,15 @@ class WideIdentifierTextMateLanguage private constructor(
             val grammar = registry.findGrammar(scopeName)
                 ?: throw IllegalArgumentException("Grammar not found for scope $scopeName")
             val langConf = registry.findLanguageConfiguration(grammar.scopeName)
+            // WideIdentifierTextMateLanguage collects completion words from a fast buffer scan on demand;
+            // having the TextMate analyzer parse and track identifiers line-by-line via syncIdentifiers
+            // on every token is redundant and significantly slows down large-file tokenization.
             return WideIdentifierTextMateLanguage(
                 grammar,
                 langConf,
                 registry,
                 ThemeRegistry.getInstance(),
-                true
+                false
             )
         }
     }

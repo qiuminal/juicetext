@@ -263,14 +263,14 @@
         },
         {
             "name": "YAML entity",
-            "scope": "yaml.entity.name,yaml.string.entity.name",
+            "scope": "entity.name.tag.yaml, yaml.entity.name, yaml.string.entity.name",
             "settings": {
                 "foreground": "#CC8242"
             }
         },
         {
             "name": "YAML string value",
-            "scope": "yaml.string.out",
+            "scope": "string.unquoted.yaml, string.unquoted, yaml.string.out",
             "settings": {
                 "foreground": "#CCCCCC"
             }

@@ -217,6 +217,23 @@
       }
     },
     {
+      "name": "YAML entity",
+      "scope": "entity.name.tag.yaml",
+      "settings": {
+        "foreground": "#9C5D27"
+      }
+    },
+    {
+      "name": "YAML unquoted string",
+      "scope": [
+        "string.unquoted.yaml",
+        "string.unquoted"
+      ],
+      "settings": {
+        "foreground": "#333333"
+      }
+    },
+    {
       "name": "HTML: Tag Names",
       "scope": "entity.name.tag",
       "settings": {

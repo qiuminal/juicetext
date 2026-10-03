@@ -1051,8 +1051,11 @@ class TextFileEditActivity : AppCompatActivity() {
         // after every currently loaded line has been tokenized; feeding the complete large file
         // here made a 400k-line dictionary look permanently unhighlighted. Remaining pages are
         // appended as the user approaches the loaded end and are analyzed incrementally.
+        // Sora tokenizes this whole page before publishing a single style, so the first page — not
+        // the steady-state 1 MB page — decides how long the file reads as plain text.
+        val firstPageBytes = TextFileSupport.largeFileInitialPageBytes(targetTab.loadedFileSize)
         val content = try {
-            withContext(Dispatchers.IO) { pager.readNextTextPage().orEmpty() }
+            withContext(Dispatchers.IO) { pager.readNextTextPage(firstPageBytes).orEmpty() }
         } catch (e: Exception) {
             pager.close()
             targetTab.largeFilePager = null
@@ -1400,11 +1403,11 @@ class TextFileEditActivity : AppCompatActivity() {
             }
         }
 
-        fun readNextTextPage(): String? {
+        fun readNextTextPage(maxBytes: Int = TextFileSupport.LARGE_FILE_PAGE_BYTES): String? {
             if (isFullyConsumed) return null
             val bytes = when {
-                channel != null -> readMappedBytes(TextFileSupport.LARGE_FILE_PAGE_BYTES)
-                stream != null -> readStreamBytes(TextFileSupport.LARGE_FILE_PAGE_BYTES)
+                channel != null -> readMappedBytes(maxBytes)
+                stream != null -> readStreamBytes(maxBytes)
                 else -> ByteArray(0)
             }
             if (bytes.isEmpty() && isFullyConsumed) {
