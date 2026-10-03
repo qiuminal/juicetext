@@ -2,9 +2,19 @@
 <resources>
     <string name="app_name_debug">就文本（偵錯）</string>
     <string name="app_name_release">就文本</string>
+    <string name="set_home">設為主頁</string>
+    <string name="enable_autocomplete">啟用自動補全</string>
+    <string name="enable_autocomplete_hint">輸入時顯示候選詞彈窗</string>
+    <string name="completion_item_desc">自動補全</string>
+    <string name="home_set">已設為主頁</string>
+    <string name="settings">設定</string>
+    <string name="dark_mode">深色模式</string>
+    <string name="theme_day">白天</string>
+    <string name="theme_night">黑夜</string>
+    <string name="theme_system">跟隨系統</string>
 
     <string name="edit_user_files">JuiceText</string>
-    <string name="theme_toggle">切換白天/暗黑模式</string>
+    <string name="theme_toggle">切換白天/黑夜/跟隨系統</string>
     <string name="parent_directory">..</string>
     <string name="empty_directory">（空目錄）</string>
     <string name="loading_directory">正在載入資料夾…</string>
@@ -28,6 +38,7 @@
     <string name="delete">刪除</string>
     <string name="deleted">已刪除</string>
     <string name="delete_failed">刪除失敗：%1$s</string>
+    <string name="alias">別名</string>
     <string name="confirm_delete">刪除「%1$s」？</string>
 
     <string name="find_replace">尋找/取代</string>
@@ -75,15 +86,16 @@
 
     <string name="grant_access_message">請於系統檔案選擇器中選取一個目錄，再點選「使用此資料夾」以授權編輯該目錄中的檔案。</string>
     <string name="grant_access_denied">未授予存取權限，無法啟動編輯器。</string>
-    <string name="change_root_folder">切換根目錄</string>
     <string name="open_single_file">開啟單一檔案…</string>
     <string name="new_text_file">新建文字文件</string>
     <string name="new_text_file_default_name">新建文字文件</string>
     <string name="new_text_file_failed">新建文字文件失敗</string>
+    <string name="new_folder">新增資料夾</string>
+    <string name="new_folder_default_name">新增資料夾</string>
+    <string name="new_folder_failed">新增資料夾失敗</string>
     <string name="low_memory_features_disabled">記憶體不足：已關閉部分功能（語法高亮、診斷、自動補全）。</string>
     <string name="editor_runtime_recovered">編輯器發生異常，已自動降級部分功能以保持可用。</string>
     <string name="open_file">開啟</string>
     <string name="all_files_access_message">請於系統設定中允許存取和管理所有檔案。</string>
-    <string name="use_this_folder">使用此資料夾</string>
     <string name="close_tab">關閉分頁</string>
 </resources>

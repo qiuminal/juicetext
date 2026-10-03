@@ -145,6 +145,19 @@ class PhaseOneEditorContractsTest {
     }
 
     @Test
+    fun `new folder name avoids collisions case-insensitively`() {
+        assertEquals("新建文件夹", NewFileNaming.uniqueDirectoryName("新建文件夹", emptySet()))
+        assertEquals(
+            "新建文件夹 2",
+            NewFileNaming.uniqueDirectoryName("新建文件夹", setOf("新建文件夹")),
+        )
+        assertEquals(
+            "New folder 3",
+            NewFileNaming.uniqueDirectoryName("New folder", setOf("new folder", "New Folder 2")),
+        )
+    }
+
+    @Test
     fun `markdown extension selects markdown scope`() {
         assertEquals("text.html.markdown", TextFileSupport.detectScopeName("README.md"))
         assertEquals("text.html.markdown", TextFileSupport.detectScopeName("guide.markdown"))
@@ -162,14 +175,18 @@ class PhaseOneEditorContractsTest {
     }
 
     @Test
-    fun `manual theme maps dark and light without system following`() {
-        assertEquals(
-            androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES,
-            ManualTheme.mode(dark = true),
-        )
+    fun `manual theme cycles day night and system`() {
         assertEquals(
             androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO,
-            ManualTheme.mode(dark = false),
+            ManualTheme.mode(ManualTheme.MODE_DAY),
+        )
+        assertEquals(
+            androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES,
+            ManualTheme.mode(ManualTheme.MODE_NIGHT),
+        )
+        assertEquals(
+            androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM,
+            ManualTheme.mode(ManualTheme.MODE_SYSTEM),
         )
     }
 

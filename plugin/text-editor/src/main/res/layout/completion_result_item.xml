@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Replacement for sora-editor's default_completion_result_item.xml.
+
+  The library version uses a fixed 45dp item height (see DefaultCompletionItemAdapter#getItemHeight)
+  with only 2dp bottom padding. When the user has a larger system font, the two text lines no longer
+  fit in 45dp, so the secondary line ("自动补全") is squeezed against / clipped by the popup's bottom
+  edge. This layout keeps the same structure and ids but adds breathing room at the bottom; the
+  matching CompletionItemAdapter computes the item height from the current font scale.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingTop="4dp"
+    android:paddingBottom="6dp">
+
+    <ImageView
+        android:id="@+id/result_item_image"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_marginLeft="8dp"
+        android:layout_marginRight="8dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_vertical"
+        android:paddingRight="8dp">
+
+        <TextView
+            android:id="@+id/result_item_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/result_item_desc"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="11sp"
+            android:layout_marginTop="3dp" />
+
+    </LinearLayout>
+
+</LinearLayout>

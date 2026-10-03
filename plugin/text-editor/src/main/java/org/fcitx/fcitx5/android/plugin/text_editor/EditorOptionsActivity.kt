@@ -67,8 +67,16 @@ class EditorOptionsActivity : AppCompatActivity() {
 
         setupTextSize()
         setupTabWidth()
+        setupAutoComplete()
         setupExternalChange()
         setupFontList()
+    }
+
+    private fun setupAutoComplete() {
+        binding.autoCompleteSwitch.isChecked = prefs.getBoolean(PREF_AUTO_COMPLETE, true)
+        binding.autoCompleteSwitch.setOnCheckedChangeListener { _, checked ->
+            prefs.edit().putBoolean(PREF_AUTO_COMPLETE, checked).apply()
+        }
     }
 
     private fun setupExternalChange() {
@@ -269,6 +277,7 @@ class EditorOptionsActivity : AppCompatActivity() {
         const val PREF_TAB_WIDTH = "tab_width"
         const val PREF_TEXT_SIZE = "text_size"
         const val PREF_TEXT_SIZE_CHANGE_ID = "text_size_change_id"
+        const val PREF_AUTO_COMPLETE = "auto_complete"
         const val PREF_FONT_FALLBACK = "font_fallback_files"
 
         const val PREF_EXTERNAL_CHANGE = "external_change_action"

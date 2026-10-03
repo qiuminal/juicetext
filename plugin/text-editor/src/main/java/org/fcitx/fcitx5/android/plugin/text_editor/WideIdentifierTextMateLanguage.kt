@@ -6,6 +6,7 @@ package org.fcitx.fcitx5.android.plugin.text_editor
 
 import android.os.Bundle
 import io.github.rosemoe.sora.lang.completion.CompletionHelper
+import io.github.rosemoe.sora.lang.completion.CompletionItem
 import io.github.rosemoe.sora.lang.completion.CompletionPublisher
 import io.github.rosemoe.sora.lang.completion.IdentifierAutoComplete
 import io.github.rosemoe.sora.langs.textmate.TextMateLanguage
@@ -27,7 +28,8 @@ class WideIdentifierTextMateLanguage private constructor(
     languageConfiguration: LanguageConfiguration?,
     grammarRegistry: GrammarRegistry,
     themeRegistry: ThemeRegistry,
-    collectIdentifiers: Boolean
+    collectIdentifiers: Boolean,
+    private val completionDescription: CharSequence?
 ) : TextMateLanguage(grammar, languageConfiguration, grammarRegistry, themeRegistry, collectIdentifiers) {
 
     override fun requireAutoComplete(
@@ -40,8 +42,31 @@ class WideIdentifierTextMateLanguage private constructor(
         val prefix = CompletionHelper.computePrefix(content, position) { ch -> isWordPart(ch) }
         if (prefix.isEmpty()) return
         val identifiers = collectBufferIdentifiers(content, prefix, position)
-        getAutoCompleter().requireAutoComplete(content, position, prefix, publisher, identifiers)
+        // Build the candidate list ourselves (instead of IdentifierAutoComplete.requireAutoComplete)
+        // so we can replace the popup's secondary label. The library hardcodes it to "Identifier"
+        // (or "Keyword"), which is meaningless here: buffer-word completion only ever produces one
+        // kind, so a single fixed localized label is enough. getItems() is useless for this because
+        // the publisher only fills its public list on the next UI update.
+        val items = getAutoCompleter().createCompletionItemList(prefix, identifiers)
+        if (items.isEmpty()) return
+        completionDescription?.let { desc -> items.forEach { it.desc = desc } }
+        publisher.addItems(items)
+        publisher.setComparator(completionComparator(prefix))
     }
+
+    /** Local replacement for the library's internal comparator: prefer prefix matches, then shorter labels. */
+    private fun completionComparator(prefix: String): Comparator<CompletionItem> =
+        Comparator { a, b ->
+            val la = a.label?.toString().orEmpty()
+            val lb = b.label?.toString().orEmpty()
+            val aStarts = la.regionMatches(0, prefix, 0, prefix.length, ignoreCase = true)
+            val bStarts = lb.regionMatches(0, prefix, 0, prefix.length, ignoreCase = true)
+            when {
+                aStarts != bStarts -> if (aStarts) -1 else 1
+                la.length != lb.length -> la.length - lb.length
+                else -> la.compareTo(lb, ignoreCase = true)
+            }
+        }
 
     private fun collectBufferIdentifiers(
         content: ContentReference,
@@ -87,7 +112,10 @@ class WideIdentifierTextMateLanguage private constructor(
         private fun isWordPart(c: Char): Boolean =
             Character.isJavaIdentifierPart(c) || c == '-' || c == '.'
 
-        fun create(scopeName: String): WideIdentifierTextMateLanguage {
+        fun create(
+            scopeName: String,
+            completionDescription: CharSequence?
+        ): WideIdentifierTextMateLanguage {
             val registry = GrammarRegistry.getInstance()
             val grammar = registry.findGrammar(scopeName)
                 ?: throw IllegalArgumentException("Grammar not found for scope $scopeName")
@@ -100,7 +128,8 @@ class WideIdentifierTextMateLanguage private constructor(
                 langConf,
                 registry,
                 ThemeRegistry.getInstance(),
-                false
+                false,
+                completionDescription
             )
         }
     }

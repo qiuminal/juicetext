@@ -50,7 +50,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.fcitx.fcitx5.android.plugin.text_editor.databinding.ActivityTextFileEditBinding
-import splitties.views.topPadding
 import timber.log.Timber
 import java.io.BufferedInputStream
 import java.io.File
@@ -74,6 +73,7 @@ class TextFileEditActivity : AppCompatActivity() {
     private var wordWrap: Boolean = true
     private var showWhitespace: Boolean = false
     private var useTab: Boolean = true
+    private var autoCompleteEnabled: Boolean = true
     private var fileSizeBytes: Long = 0L
     private var isRegex: Boolean = false
     private var isCaseSensitive: Boolean = false
@@ -138,12 +138,17 @@ class TextFileEditActivity : AppCompatActivity() {
         editor.tabWidth = readTabWidth()
         editor.setWordwrap(if (tab.isLargeFile) false else wordWrap)
         editor.nonPrintablePaintingFlags = whitespaceFlags()
-        editor.props.disallowSuggestions = true
+        editor.props.disallowSuggestions = false
         editor.props.cacheRenderNodeForLongLines = !tab.isLargeFile
         editor.props.deleteEmptyLineFast = false
         installDefaultSymbolPairs(editor.props.overrideSymbolPairs)
+        editor.getComponent(EditorAutoCompletion::class.java).apply {
+            isEnabled = autoCompleteEnabled && !tab.isLargeFile
+            // Custom adapter so the secondary ("自动补全") line keeps clear of the popup's bottom
+            // edge at larger system font scales.
+            setAdapter(CompletionItemAdapter())
+        }
         if (tab.isLargeFile) {
-            editor.getComponent(EditorAutoCompletion::class.java).isEnabled = false
             editor.setHighlightCurrentBlock(false)
             editor.setHighlightCurrentLine(false)
             editor.setHighlightBracketPair(false)
@@ -172,7 +177,9 @@ class TextFileEditActivity : AppCompatActivity() {
         val scopeName = TextFileSupport.detectScopeName(tab.displayName)
         // Always set the proper language directly — deferred highlighting
         // (PlainLanguage → real language after 180ms) is only for the initial load.
-        val language = TextMateSetup.createLanguage(scopeName, assets, useTab)
+        val language = TextMateSetup.createLanguage(
+            scopeName, assets, useTab, getString(R.string.completion_item_desc)
+        )
         editor.setEditorLanguage(language)
         if (scopeName != null) {
             editor.installOnlineBracketsMatcher()
@@ -197,6 +204,7 @@ class TextFileEditActivity : AppCompatActivity() {
         wordWrap = prefs.getBoolean(PREF_WORD_WRAP, true)
         showWhitespace = prefs.getBoolean(PREF_SHOW_WHITESPACE, false)
         useTab = prefs.getBoolean(PREF_USE_TAB, true)
+        autoCompleteEnabled = prefs.getBoolean(PREF_AUTO_COMPLETE, true)
         fileSizeBytes = intent.getLongExtra(EXTRA_FILE_SIZE, -1L).coerceAtLeast(0L)
         isLargeFile = TextFileSupport.isLargeFile(fileSizeBytes)
         // Force word-wrap off for large files — wrap layout reflows the entire buffer on width
@@ -213,7 +221,15 @@ class TextFileEditActivity : AppCompatActivity() {
                 leftMargin = navBars.left
                 rightMargin = navBars.right
             }
-            binding.toolbar.topPadding = statusBars.top
+            // The Toolbar lays its action menu out at getPaddingRight(), so a right padding
+            // (not contentInsetEnd) is what moves the top-right icons clear of the display's
+            // rounded corner and edge gesture zone.
+            binding.toolbar.setPadding(
+                binding.toolbar.paddingLeft,
+                statusBars.top,
+                (TOOLBAR_END_INSET_DP * resources.displayMetrics.density).toInt(),
+                binding.toolbar.paddingBottom,
+            )
             // The keyBar floats above the IME, and the editor is constraint-anchored to keyBar's
             // top — so shrinking the editor when the keyboard opens just means pushing keyBar up.
             // bottomMargin (not padding) so the editor view actually shrinks; sora's completion
@@ -317,6 +333,13 @@ class TextFileEditActivity : AppCompatActivity() {
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        saveItem = menu.add(R.string.save).apply {
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            setOnMenuItemClickListener {
+                if (isDirty()) saveFile()
+                true
+            }
+        }
         menu.add(R.string.open_file).apply {
             setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
             setOnMenuItemClickListener {
@@ -324,7 +347,6 @@ class TextFileEditActivity : AppCompatActivity() {
                 true
             }
         }
-        saveItem = null
         undoItem = null
         redoItem = null
         menu.add(R.string.find_replace).apply {
@@ -378,7 +400,9 @@ class TextFileEditActivity : AppCompatActivity() {
                 useTab = !useTab
                 isChecked = !useTab
                 activeEditor().setEditorLanguage(
-                    TextMateSetup.createLanguage(activeScopeName(), assets, useTab)
+                    TextMateSetup.createLanguage(
+                        activeScopeName(), assets, useTab, getString(R.string.completion_item_desc)
+                    )
                 )
                 // setEditorLanguage runs styleDelegate.reset() → reinstall bracket matcher.
                 activeEditor().installOnlineBracketsMatcher()
@@ -394,6 +418,16 @@ class TextFileEditActivity : AppCompatActivity() {
         super.onResume()
         if (!::binding.isInitialized) return
         maybeRestoreFromLowMemoryMode()
+        val autoComplete = prefs.getBoolean(PREF_AUTO_COMPLETE, true)
+        if (autoComplete != autoCompleteEnabled) {
+            autoCompleteEnabled = autoComplete
+            if (!lowMemoryMode) {
+                tabs.forEach { tab ->
+                    tab.editor?.getComponent(EditorAutoCompletion::class.java)?.isEnabled =
+                        autoCompleteEnabled && !tab.isLargeFile
+                }
+            }
+        }
         val newTabWidth = readTabWidth()
         val textSizeChangeId = prefs.getLong(EditorOptionsActivity.PREF_TEXT_SIZE_CHANGE_ID, 0L)
         val shouldApplyDefaultTextSize = EditorOptionsActivity.shouldApplyDefaultTextSize(
@@ -692,9 +726,6 @@ class TextFileEditActivity : AppCompatActivity() {
     }
 
     private fun setupKeyBar() {
-        binding.keySave.setOnClickListener {
-            if (isDirty()) saveFile()
-        }
         binding.keyUndo.setOnClickListener {
             if (activeEditor().canUndo()) activeEditor().undo()
         }
@@ -878,7 +909,8 @@ class TextFileEditActivity : AppCompatActivity() {
     // scrollable instead of squishing keys below their minimum tap target.
     private fun applyKeyBarDistribution() {
         val container = binding.keysContainer
-        val viewport = binding.keysScroll.width
+        val viewport = binding.keysScroll.width -
+            binding.keysScroll.paddingStart - binding.keysScroll.paddingEnd
         if (viewport <= 0 || container.childCount == 0) return
         // EditorKey style declares 30dp per key — that's the target width when not stretching.
         // Use it instead of measuring TextView text bounds, which would be narrower than the tap target.
@@ -943,8 +975,6 @@ class TextFileEditActivity : AppCompatActivity() {
         saveItem?.isEnabled = dirty
         undoItem?.isEnabled = canUndo
         redoItem?.isEnabled = canRedo
-        binding.keySave.isEnabled = dirty
-        binding.keySave.alpha = if (dirty) 1f else 0.4f
         binding.keyUndo.isEnabled = canUndo
         binding.keyUndo.alpha = if (canUndo) 1f else 0.4f
         binding.keyRedo.isEnabled = canRedo
@@ -1281,11 +1311,15 @@ class TextFileEditActivity : AppCompatActivity() {
                 val editor = tab.editor ?: return@forEach
                 editor.setStyles(null)
                 editor.setDiagnostics(null)
-                editor.setEditorLanguage(TextMateSetup.createLanguage(null, assets, useTab))
+                editor.setEditorLanguage(
+                    TextMateSetup.createLanguage(
+                        null, assets, useTab, getString(R.string.completion_item_desc)
+                    )
+                )
                 editor.installOnlineBracketsMatcher()
                 editor.getComponent(EditorAutoCompletion::class.java).isEnabled = false
                 editor.props.cacheRenderNodeForLongLines = false
-                editor.props.disallowSuggestions = true
+                editor.props.disallowSuggestions = false
             }
             if (!lowMemoryNoticeShown) {
                 lowMemoryNoticeShown = true
@@ -1306,7 +1340,8 @@ class TextFileEditActivity : AppCompatActivity() {
             tabs.forEach { tab ->
                 val editor = tab.editor ?: return@forEach
                 editor.props.cacheRenderNodeForLongLines = !tab.isLargeFile
-                editor.getComponent(EditorAutoCompletion::class.java).isEnabled = !tab.isLargeFile
+                editor.getComponent(EditorAutoCompletion::class.java).isEnabled =
+                    autoCompleteEnabled && !tab.isLargeFile
                 if (tab.isLargeFile) {
                     editor.setHighlightCurrentBlock(false)
                     editor.setHighlightCurrentLine(false)
@@ -1352,7 +1387,9 @@ class TextFileEditActivity : AppCompatActivity() {
         private const val PREF_WORD_WRAP = "word_wrap"
         private const val PREF_SHOW_WHITESPACE = "show_whitespace"
         private const val PREF_USE_TAB = "use_tab"
+        private const val PREF_AUTO_COMPLETE = "auto_complete"
         private const val PREFETCH_VIEWPORT_MULTIPLIER = 2
+        private const val TOOLBAR_END_INSET_DP = 12
         private const val DRAFT_SAVE_DEBOUNCE_MS = 750L
     }
 

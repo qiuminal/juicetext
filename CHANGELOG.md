@@ -4,6 +4,20 @@ All notable changes to juicetext are recorded here. Release tags use the format 
 
 ## Unreleased
 
+## [0.3.4] - 2026-10-04
+
+- Added a three-state dark mode (day → night → follow system), replacing the old light/dark toggle, with migration of the previous setting and a toolbar icon that reflects the current mode.
+- Added "Set as home page": the file browser always starts from shared storage and can remember a chosen home directory.
+- Added "New folder" to the file-browser menu and reordered the menu (new text document, new folder, set as home, settings).
+- Added folder aliases, shown in green bold next to the folder name and stored only in app data without touching the file itself.
+- Moved the editor Save action from the bottom key bar to the top app bar.
+- Moved the autocomplete switch into Editor Options alongside text size, tab width, and font settings.
+- Localized the completion popup's secondary label, which previously showed the hardcoded "Identifier", and reworked the popup item layout so the label stays clear of the popup's bottom edge at larger font scales.
+- Fixed a 0.3.3 regression that made regular files such as `.txt` and `.md` show the "unsupported file" icon instead of the text icon.
+- Fixed duplicated text when using IME voice dictation.
+- Tightened the top toolbar icon inset to 12dp and the bottom key bar side padding to 16dp.
+- Removed the "change root folder" action now that the browser root is fixed to shared storage.
+
 ## [0.3.3] - 2026-10-03
 
 - Added Shizuku UserService access for browsing, reading, editing, and saving files under shared storage, including Android/data.

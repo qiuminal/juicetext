@@ -216,6 +216,7 @@
         android:layout_height="wrap_content"
         android:background="?android:attr/colorBackground"
         android:orientation="vertical"
+        android:paddingBottom="8dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent">
@@ -230,6 +231,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:fillViewport="true"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
             android:scrollbars="none">
 
             <LinearLayout
@@ -237,12 +240,6 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal">
-
-                <TextView
-                    android:id="@+id/keySave"
-                    style="@style/EditorKey"
-                    android:contentDescription="@string/save"
-                    android:text="💾" />
 
                 <TextView
                     android:id="@+id/keyUndo"

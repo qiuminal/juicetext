@@ -14,14 +14,24 @@ import android.os.Bundle
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
+import android.text.Spannable
+import android.text.SpannableStringBuilder
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
+import android.graphics.Typeface
 import java.io.File
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.RadioButton
+import android.widget.RadioGroup
+import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -43,7 +53,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.fcitx.fcitx5.android.plugin.text_editor.databinding.ActivityFileBrowserBinding
 import org.fcitx.fcitx5.android.plugin.text_editor.databinding.ItemFileEntryBinding
-import splitties.views.topPadding
 import rikka.shizuku.Shizuku
 
 class FileBrowserActivity : AppCompatActivity() {
@@ -102,16 +111,6 @@ class FileBrowserActivity : AppCompatActivity() {
         val parent: DocumentFile?
     )
 
-    private val pickingDirectory get() = intent.getBooleanExtra(EXTRA_PICK_DIRECTORY, false)
-    private val pickDirectory = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        val path = result.data?.data?.path
-        if (result.resultCode == RESULT_OK && path != null) {
-            prefs.edit().putString(PREF_ROOT_PATH, path).remove(PREF_ROOT_SNAPSHOT).apply()
-            directorySnapshots.clear()
-            restoredPath = null
-            openTree(Uri.fromFile(File(path)))
-        }
-    }
     private val requestLegacyWrite = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
         ensureStorageAccess()
     }
@@ -132,7 +131,15 @@ class FileBrowserActivity : AppCompatActivity() {
                 leftMargin = navBars.left
                 rightMargin = navBars.right
             }
-            binding.toolbar.topPadding = statusBars.top
+            // The Toolbar lays its action menu out at getPaddingRight(), so a right padding
+            // (not contentInsetEnd) is what moves the top-right icons clear of the display's
+            // rounded corner and edge gesture zone.
+            binding.toolbar.setPadding(
+                binding.toolbar.paddingLeft,
+                statusBars.top,
+                (TOOLBAR_END_INSET_DP * resources.displayMetrics.density).toInt(),
+                binding.toolbar.paddingBottom,
+            )
             binding.recyclerView.setPadding(0, 0, 0, navBars.bottom)
             insets
         }
@@ -225,59 +232,44 @@ class FileBrowserActivity : AppCompatActivity() {
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        if (!pickingDirectory) menu.add(R.string.shizuku_open).setOnMenuItemClickListener {
-            try {
-                check(Shizuku.pingBinder()) { getString(R.string.shizuku_unavailable) }
-                check(!Shizuku.isPreV11()) { getString(R.string.shizuku_update) }
-                if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) openShizukuBrowser()
-                else {
-                    pendingShizukuPath = "/storage/emulated/0"
-                    awaitingShizuku = true
-                    Shizuku.requestPermission(ShizukuFileReader.PERMISSION_REQUEST_CODE)
-                }
-            } catch (e: Exception) {
-                awaitingShizuku = false
-                toast(e.message ?: getString(R.string.shizuku_unavailable))
-            }
-            true
-        }
         menu.add(Menu.NONE, MENU_THEME_TOGGLE, Menu.NONE, R.string.theme_toggle).apply {
-            icon = getDrawable(
-                if (ManualTheme.isDark(this@FileBrowserActivity)) R.drawable.ic_theme_light
-                else R.drawable.ic_theme_dark
-            )
+            icon = getDrawable(ManualTheme.iconRes(ManualTheme.currentMode(this@FileBrowserActivity)))
             setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
             setOnMenuItemClickListener {
-                ManualTheme.toggle(this@FileBrowserActivity)
+                ManualTheme.cycle(this@FileBrowserActivity)
+                invalidateOptionsMenu()
                 true
             }
         }
-        menu.add(if (pickingDirectory) R.string.use_this_folder else R.string.change_root_folder).apply {
-            setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
-            setOnMenuItemClickListener {
-                if (pickingDirectory) {
-                    currentDir?.let { setResult(RESULT_OK, Intent().setData(it.uri)); finish() }
-                } else if (storageRequirement() == StorageAccessRequirement.NONE) {
-                    pickDirectory.launch(Intent(this@FileBrowserActivity, FileBrowserActivity::class.java)
-                        .putExtra(EXTRA_PICK_DIRECTORY, true))
-                } else requestStorageAccess()
-                true
-            }
-        }
-        if (!pickingDirectory) menu.add(R.string.new_text_file).apply {
+        menu.add(R.string.new_text_file).apply {
             setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
             setOnMenuItemClickListener {
                 createNewTextFile()
                 true
             }
         }
+        menu.add(R.string.new_folder).apply {
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+            setOnMenuItemClickListener {
+                createNewFolder()
+                true
+            }
+        }
+        menu.add(R.string.set_home).apply {
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+            setOnMenuItemClickListener {
+                setCurrentDirectoryAsHome()
+                true
+            }
+        }
+        menu.add(R.string.settings).apply {
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
+            setOnMenuItemClickListener {
+                showSettingsDialog()
+                true
+            }
+        }
         return true
-    }
-
-    private fun openShizukuBrowser() {
-        // Shizuku permission belongs to the app service, not to a user-selected directory.
-        shizukuMode = true
-        navigateShizuku("/storage/emulated/0")
     }
 
     private fun navigateShizuku(path: String) {
@@ -395,10 +387,9 @@ class FileBrowserActivity : AppCompatActivity() {
     }
 
     private fun restoreCachedRootSnapshot() {
-        if (pickingDirectory) return
-        val rootUri = prefs.getString(PREF_ROOT_PATH, null) ?: return
+        val rootPath = Environment.getExternalStorageDirectory().absolutePath
         val encoded = prefs.getString(PREF_ROOT_SNAPSHOT, null) ?: return
-        val cached = runCatching { DirectorySnapshotCodec.decode(encoded, rootUri) }.getOrNull() ?: return
+        val cached = runCatching { DirectorySnapshotCodec.decode(encoded, rootPath) }.getOrNull() ?: return
         if (cached.isEmpty()) return
         val restored = cached.mapNotNull { item ->
             runCatching {
@@ -419,7 +410,7 @@ class FileBrowserActivity : AppCompatActivity() {
             currentPath = "/"
             binding.pathBar.text = currentPath
             val result = DirectoryResult(restored, parent = null)
-            directorySnapshots[rootUri] = result
+            directorySnapshots[DocumentFile.fromFile(File(rootPath)).uri.toString()] = result
             replaceEntries(restored)
             showContent()
         }
@@ -440,8 +431,7 @@ class FileBrowserActivity : AppCompatActivity() {
                 )
             }
             .toList()
-        if (pickingDirectory) return
-        val cacheRootUri = prefs.getString(PREF_ROOT_PATH, null) ?: root.uri.path.orEmpty()
+        val cacheRootUri = root.uri.path.orEmpty()
         prefs.edit().putString(
             PREF_ROOT_SNAPSHOT,
             DirectorySnapshotCodec.encode(cacheRootUri, snapshot),
@@ -458,10 +448,8 @@ class FileBrowserActivity : AppCompatActivity() {
         if (storageRequirement() != StorageAccessRequirement.NONE) {
             showGrantState()
         } else if (rootTree == null && directoryJob == null) {
-            restoreCachedRootSnapshot()
-            val defaultPath = Environment.getExternalStorageDirectory().absolutePath
-            val path = if (pickingDirectory) defaultPath else prefs.getString(PREF_ROOT_PATH, defaultPath)!!
-            openTree(Uri.fromFile(File(path)))
+            if (prefs.getString(PREF_HOME_PATH, null).isNullOrBlank()) restoreCachedRootSnapshot()
+            openTree(Uri.fromFile(File(Environment.getExternalStorageDirectory().absolutePath)))
         }
     }
 
@@ -510,16 +498,12 @@ class FileBrowserActivity : AppCompatActivity() {
             if (root == null) {
                 directoryJob = null
                 showState(getString(R.string.folder_load_failed)) {
-                    prefs.edit().remove(PREF_ROOT_PATH).apply()
                     ensureStorageAccess()
                 }
                 return@launch
             }
             rootTree = root
             directoryJob = null
-            val persistedUri = prefs.getString(PREF_ROOT_PATH, null)
-            val cachedResult = persistedUri?.let(directorySnapshots::get)
-            if (cachedResult != null) directorySnapshots[root.uri.toString()] = cachedResult
             val restorePath = restoredPath
             restoredPath = null
             if (!restorePath.isNullOrBlank() && restorePath != "/") {
@@ -530,6 +514,7 @@ class FileBrowserActivity : AppCompatActivity() {
                     return@launch
                 }
             }
+            if (openHomeDirectory(root, generation)) return@launch
             navigateTo(root, path = "/", showProgress = false)
         }
     }
@@ -570,7 +555,7 @@ class FileBrowserActivity : AppCompatActivity() {
         directoryJob = lifecycleScope.launch {
             val result = try {
                 withContext(Dispatchers.IO) {
-                    scanDirectory(dir, root)
+                    resolveAmbiguousTextIcons(scanDirectory(dir, root))
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -737,24 +722,27 @@ class FileBrowserActivity : AppCompatActivity() {
                 navigateShizuku(File(shizukuPath).parentFile?.path ?: "/storage/emulated/0")
             } else if (entry.isDirectory) {
                 navigateShizuku(File(shizukuPath, entry.name).path)
-            } else if (!pickingDirectory) {
+            } else {
                 openShizukuFile(File(shizukuPath, entry.name).path)
             }
             return
         }
         if (!entry.isParent && entry.isDirectory) {
             val path = entry.doc.uri.path.orEmpty()
-            if (path == "/storage/emulated/0/Android/data" ||
-                path.startsWith("/storage/emulated/0/Android/data/")) {
-                if (hasShizukuAccess()) {
-                    shizukuMode = true
-                    navigateShizuku(path)
-                } else if (runCatching { Shizuku.pingBinder() }.getOrDefault(false)) {
-                    pendingShizukuPath = path
-                    awaitingShizuku = true
-                    Shizuku.requestPermission(ShizukuFileReader.PERMISSION_REQUEST_CODE)
-                } else {
-                    navigateTo(entry.doc, childPath(currentPath, entry.name), backgroundRefresh = true)
+            if (needsShizukuPath(path)) {
+                when {
+                    !shizukuBrowseEnabled ->
+                        navigateTo(entry.doc, childPath(currentPath, entry.name), backgroundRefresh = true)
+                    hasShizukuAccess() -> {
+                        shizukuMode = true
+                        navigateShizuku(path)
+                    }
+                    runCatching { Shizuku.pingBinder() }.getOrDefault(false) -> {
+                        pendingShizukuPath = path
+                        awaitingShizuku = true
+                        Shizuku.requestPermission(ShizukuFileReader.PERMISSION_REQUEST_CODE)
+                    }
+                    else -> navigateTo(entry.doc, childPath(currentPath, entry.name), backgroundRefresh = true)
                 }
                 return
             }
@@ -768,7 +756,6 @@ class FileBrowserActivity : AppCompatActivity() {
             navigateTo(entry.doc, targetPath, backgroundRefresh = true)
             return
         }
-        if (pickingDirectory) return
         fileOpenJob?.cancel()
         fileOpenJob = lifecycleScope.launch {
             openFileUri(entry.doc.uri, entry.name, entry.mimeType, entry.size)
@@ -779,6 +766,98 @@ class FileBrowserActivity : AppCompatActivity() {
         Shizuku.pingBinder() && !Shizuku.isPreV11() &&
             Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
     }.getOrDefault(false)
+
+    private val shizukuBrowseEnabled: Boolean
+        get() = prefs.getBoolean(PREF_SHIZUKU_BROWSE, true)
+
+    /** Android/data is unreadable through the normal file API; it needs the Shizuku service. */
+    private fun needsShizukuPath(path: String): Boolean =
+        path == ANDROID_DATA_PATH || path.startsWith("$ANDROID_DATA_PATH/")
+
+    /** True when the configured home directory was successfully opened. */
+    private suspend fun openHomeDirectory(root: DocumentFile, generation: Long): Boolean {
+        val home = prefs.getString(PREF_HOME_PATH, null)?.trim().orEmpty()
+        if (home.isEmpty() || home == "/") return false
+        val rootPath = File(root.uri.path!!).path
+        if (home == rootPath) return false
+        if (needsShizukuPath(home)) {
+            if (!shizukuBrowseEnabled) return false
+            if (hasShizukuAccess()) {
+                shizukuMode = true
+                navigateShizuku(home)
+                return true
+            }
+            if (runCatching { Shizuku.pingBinder() }.getOrDefault(false)) {
+                pendingShizukuPath = home
+                awaitingShizuku = true
+                Shizuku.requestPermission(ShizukuFileReader.PERMISSION_REQUEST_CODE)
+            }
+            return false
+        }
+        val base = rootPath.trimEnd('/')
+        if (!home.startsWith("$base/")) return false
+        val relative = home.removePrefix(base)
+        if (relative.isEmpty() || relative == "/") return false
+        val target = withContext(Dispatchers.IO) { resolveRelativeDirectory(root, relative) }
+        if (generation != directoryGeneration) return false
+        if (target == null) return false
+        navigateTo(target, path = relative, showProgress = false, backgroundRefresh = true)
+        return true
+    }
+
+    private fun setCurrentDirectoryAsHome() {
+        val path = currentDir?.uri?.path
+        if (path.isNullOrBlank()) return
+        prefs.edit().putString(PREF_HOME_PATH, path).apply()
+        toast(getString(R.string.home_set))
+    }
+
+    private fun showSettingsDialog() {
+        val pad = (20 * resources.displayMetrics.density).toInt()
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+        }
+        val shizukuToggle = CheckBox(this).apply {
+            setText(R.string.shizuku_open)
+            isChecked = shizukuBrowseEnabled
+        }
+        container.addView(shizukuToggle)
+        container.addView(TextView(this).apply {
+            setText(R.string.dark_mode)
+            setPadding(0, pad / 2, 0, 0)
+        })
+        val current = ManualTheme.currentMode(this)
+        val group = RadioGroup(this)
+        listOf(
+            ManualTheme.MODE_DAY to R.string.theme_day,
+            ManualTheme.MODE_NIGHT to R.string.theme_night,
+            ManualTheme.MODE_SYSTEM to R.string.theme_system,
+        ).forEach { (mode, labelRes) ->
+            group.addView(RadioButton(this).apply {
+                id = View.generateViewId()
+                tag = mode
+                setText(labelRes)
+                isChecked = mode == current
+            })
+        }
+        container.addView(group)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.settings)
+            .setView(container)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                prefs.edit()
+                    .putBoolean(PREF_SHIZUKU_BROWSE, shizukuToggle.isChecked)
+                    .apply()
+                val selected = group.findViewById<RadioButton>(group.checkedRadioButtonId)?.tag as? Int
+                if (selected != null && selected != current) {
+                    ManualTheme.setMode(this, selected)
+                    invalidateOptionsMenu()
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
 
     private fun createNewTextFile() {
         val dir = currentDir
@@ -808,6 +887,61 @@ class FileBrowserActivity : AppCompatActivity() {
             }
             openFileUri(created.uri, created.name ?: fileName, "text/plain", 0L)
         }
+    }
+
+    private fun createNewFolder() {
+        val dir = currentDir
+        if (dir == null) {
+            toast(getString(R.string.new_folder_failed))
+            return
+        }
+        val existing = entries.asSequence()
+            .filterNot { it.isParent }
+            .map { it.name }
+            .toSet()
+        val editText = EditText(this).apply {
+            setText(NewFileNaming.uniqueDirectoryName(getString(R.string.new_folder_default_name), existing))
+            setSelection(0, text.length)
+        }
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        val container = FrameLayout(this).apply {
+            setPadding(pad, pad / 2, pad, 0)
+            addView(editText)
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.new_folder)
+            .setView(container)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val name = editText.text.toString().trim()
+                if (name.isEmpty() || name == "." || name == ".." || '/' in name) return@setPositiveButton
+                val existingNames = entries.asSequence()
+                    .filterNot { it.isParent }
+                    .map { it.name }
+                    .toSet()
+                val unique = if (existingNames.any { it.equals(name, ignoreCase = true) }) {
+                    NewFileNaming.uniqueDirectoryName(name, existingNames)
+                } else name
+                lifecycleScope.launch {
+                    val ok = withContext(Dispatchers.IO) {
+                        try {
+                            val target = File(File(dir.uri.path!!), unique)
+                            !target.exists() && target.mkdir()
+                        } catch (_: Exception) {
+                            false
+                        }
+                    }
+                    if (ok) {
+                        highlightedUri = null
+                        refreshCurrentDirectory(showProgress = false)
+                    } else {
+                        toast(getString(R.string.new_folder_failed))
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+        dialog.show()
+        editText.requestFocus()
     }
 
     private suspend fun openFileUri(
@@ -875,18 +1009,52 @@ class FileBrowserActivity : AppCompatActivity() {
     }
 
     private fun onEntryLongClick(entry: Entry): Boolean {
-        if (entry.isParent || pickingDirectory) return false
-        val items = arrayOf(getString(R.string.rename), getString(R.string.delete))
+        if (entry.isParent) return false
+        val actions: List<Pair<String, () -> Unit>> = if (entry.isDirectory) {
+            listOf(
+                getString(R.string.rename) to {
+                    showRenameDialog(entry.doc, entry.name, entry.isDirectory)
+                },
+                getString(R.string.alias) to { showAliasDialog(entry) },
+                getString(R.string.delete) to { showDeleteConfirm(entry.doc, entry.name) },
+            )
+        } else {
+            listOf(
+                getString(R.string.rename) to {
+                    showRenameDialog(entry.doc, entry.name, entry.isDirectory)
+                },
+                getString(R.string.delete) to { showDeleteConfirm(entry.doc, entry.name) },
+            )
+        }
         AlertDialog.Builder(this)
             .setTitle(entry.name)
-            .setItems(items) { _, which ->
-                when (which) {
-                    0 -> showRenameDialog(entry.doc, entry.name, entry.isDirectory)
-                    1 -> showDeleteConfirm(entry.doc, entry.name)
-                }
-            }
+            .setItems(actions.map { it.first }.toTypedArray()) { _, which -> actions[which].second() }
             .show()
         return true
+    }
+
+    private fun showAliasDialog(entry: Entry) {
+        val path = entry.doc.uri.path ?: return
+        val editText = EditText(this).apply {
+            setText(FolderAliases.get(this@FileBrowserActivity, path).orEmpty())
+            setSelection(0, text.length)
+        }
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        val container = FrameLayout(this).apply {
+            setPadding(pad, pad / 2, pad, 0)
+            addView(editText)
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.alias)
+            .setView(container)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                FolderAliases.set(this, path, editText.text.toString())
+                adapter.notifyDataSetChanged()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+        dialog.show()
+        editText.requestFocus()
     }
 
     private fun showRenameDialog(doc: DocumentFile, currentName: String, isDirectory: Boolean) {
@@ -977,10 +1145,31 @@ class FileBrowserActivity : AppCompatActivity() {
         return result.copy(entries = resolved)
     }
 
+    /** Folder label: original name, then the user alias rendered in green bold (display only). */
+    private fun entryLabel(entry: Entry): CharSequence {
+        if (!entry.isDirectory || entry.isParent) return entry.name
+        val alias = FolderAliases.get(this, entry.doc.uri.path.orEmpty()) ?: return entry.name
+        val text = SpannableStringBuilder(entry.name).append(" ").append(alias)
+        val aliasStart = entry.name.length + 1
+        text.setSpan(
+            ForegroundColorSpan(ALIAS_COLOR),
+            aliasStart,
+            text.length,
+            Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+        )
+        text.setSpan(
+            StyleSpan(Typeface.BOLD),
+            aliasStart,
+            text.length,
+            Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+        )
+        return text
+    }
+
     private inner class FileVH(val binding: ItemFileEntryBinding) :
         RecyclerView.ViewHolder(binding.root) {
         fun bind(entry: Entry) {
-            binding.name.text = entry.name
+            binding.name.text = entryLabel(entry)
             binding.name.setTextColor(
                 if (!entry.isParent && entry.doc.uri.toString() == highlightedUri) 0xFF2EAD55.toInt()
                 else com.google.android.material.color.MaterialColors.getColor(
@@ -1053,10 +1242,13 @@ class FileBrowserActivity : AppCompatActivity() {
         private const val STATE_CURRENT_PATH = "current_path"
         private const val RECENT_EDIT_PREFS = "recent_edit_transient"
         private const val PREFS_NAME = "text_editor"
-        private const val PREF_ROOT_PATH = "root_path"
+        private const val PREF_HOME_PATH = "home_path"
+        private const val PREF_SHIZUKU_BROWSE = "shizuku_browse_all"
         private const val PREF_STORAGE_PROMPTED = "storage_prompted"
-        private const val EXTRA_PICK_DIRECTORY = "pick_directory"
         private const val PREF_ROOT_SNAPSHOT = "root_directory_snapshot_v1"
+        private const val ANDROID_DATA_PATH = "/storage/emulated/0/Android/data"
+        private val ALIAS_COLOR = 0xFF2EAD55.toInt()
+        private const val TOOLBAR_END_INSET_DP = 12
         private const val MAX_SESSION_DIRECTORY_SNAPSHOTS = 32
         private const val UNSUPPORTED_TOAST_DURATION_MS = 600L
         private const val MENU_THEME_TOGGLE = 1001

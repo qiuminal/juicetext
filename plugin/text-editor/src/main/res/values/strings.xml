@@ -1,6 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="shizuku_open">Browse all files with Shizuku</string>
+    <string name="enable_autocomplete">Enable autocomplete</string>
+    <string name="enable_autocomplete_hint">Show word suggestions while typing</string>
+    <string name="completion_item_desc">Autocomplete</string>
+    <string name="set_home">Set as home page</string>
+    <string name="home_set">Home page set</string>
+    <string name="settings">Settings</string>
+    <string name="dark_mode">Dark mode</string>
+    <string name="theme_day">Day</string>
+    <string name="theme_night">Night</string>
+    <string name="theme_system">Follow system</string>
     <string name="shizuku_denied">Shizuku permission denied</string>
     <string name="shizuku_unavailable">Start Shizuku, then try again</string>
     <string name="shizuku_update">Update Shizuku to continue</string>
@@ -9,7 +19,7 @@
     <string name="app_name_release">juicetext</string>
 
     <string name="edit_user_files">JuiceText</string>
-    <string name="theme_toggle">Switch theme</string>
+    <string name="theme_toggle">Switch day / night / follow system</string>
     <string name="parent_directory">..</string>
     <string name="empty_directory">(empty directory)</string>
     <string name="loading_directory">Loading folder…</string>
@@ -34,6 +44,7 @@
     <string name="delete">Delete</string>
     <string name="deleted">Deleted</string>
     <string name="delete_failed">Failed to delete: %1$s</string>
+    <string name="alias">Alias</string>
     <string name="confirm_delete">Delete \"%1$s\"?</string>
 
     <string name="find_replace">Find / Replace</string>
@@ -81,15 +92,16 @@
 
     <string name="grant_access_message">Select a folder in the system file picker, then tap \"Use this folder\" to allow editing files inside it.</string>
     <string name="grant_access_denied">Access not granted; the editor cannot start.</string>
-    <string name="change_root_folder">Change root folder</string>
     <string name="open_single_file">Open single file…</string>
     <string name="new_text_file">New text file</string>
     <string name="new_text_file_default_name">untitled</string>
     <string name="new_text_file_failed">Failed to create text file</string>
+    <string name="new_folder">New folder</string>
+    <string name="new_folder_default_name">New folder</string>
+    <string name="new_folder_failed">Failed to create folder</string>
     <string name="low_memory_features_disabled">Low memory: some features were disabled (syntax highlight, diagnostics, auto-completion).</string>
     <string name="editor_runtime_recovered">An editor error occurred. Some features were disabled to keep the app responsive.</string>
     <string name="open_file">Open</string>
     <string name="all_files_access_message">Allow access to manage all files in system settings.</string>
-    <string name="use_this_folder">Use this folder</string>
     <string name="close_tab">Close tab</string>
 </resources>

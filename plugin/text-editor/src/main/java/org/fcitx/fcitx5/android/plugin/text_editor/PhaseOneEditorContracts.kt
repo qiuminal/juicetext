@@ -253,6 +253,18 @@ internal object NewFileNaming {
             index++
         }
     }
+
+    /** Folder names have no extension; keep the same "name (2), name (3)" de-duplication. */
+    fun uniqueDirectoryName(baseName: String, existingNames: Set<String>): String {
+        val existingLower = existingNames.mapTo(HashSet()) { it.lowercase() }
+        if (baseName.lowercase() !in existingLower) return baseName
+        var index = 2
+        while (true) {
+            val candidate = "$baseName $index"
+            if (candidate.lowercase() !in existingLower) return candidate
+            index++
+        }
+    }
 }
 
 internal object FileIconPolicy {

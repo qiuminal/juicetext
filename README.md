@@ -10,7 +10,7 @@ Independent Android text editor derived from the Fcitx5 Android fx version text-
 
 ## Current development state
 
-Current release: **0.3.3**. Download signed APKs from [GitHub Releases](https://github.com/qiuminal/juicetext/releases).
+Current release: **0.3.4**. Download signed APKs from [GitHub Releases](https://github.com/qiuminal/juicetext/releases).
 
 - Shared storage is browsed directly after granting all-files access; root folders are selected inside the app.
 - Large text files use paged loading with TextMate highlighting and optimized YAML colors.

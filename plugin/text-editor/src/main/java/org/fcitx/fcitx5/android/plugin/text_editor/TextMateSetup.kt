@@ -94,12 +94,18 @@ object TextMateSetup {
         }
     }
 
-    fun createLanguage(scopeName: String?, assets: AssetManager, useTab: Boolean): Language {
+    fun createLanguage(
+        scopeName: String?,
+        assets: AssetManager,
+        useTab: Boolean,
+        completionDescription: CharSequence?
+    ): Language {
         if (scopeName.isNullOrEmpty()) return PlainLanguage(useTab)
         ensureInitialized(assets)
         if (!grammarsLoaded) return PlainLanguage(useTab)
         return try {
-            WideIdentifierTextMateLanguage.create(scopeName).also { it.useTab(useTab) }
+            WideIdentifierTextMateLanguage.create(scopeName, completionDescription)
+                .also { it.useTab(useTab) }
         } catch (e: Exception) {
             Timber.e(e, "Failed to create TextMate language for $scopeName")
             PlainLanguage(useTab)

@@ -1,6 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="shizuku_open">通过 Shizuku 浏览全部文件</string>
+    <string name="enable_autocomplete">启用自动补全</string>
+    <string name="enable_autocomplete_hint">输入时显示候选词弹窗</string>
+    <string name="completion_item_desc">自动补全</string>
+    <string name="set_home">设为主页</string>
+    <string name="home_set">已设为主页</string>
+    <string name="settings">设置</string>
+    <string name="dark_mode">深色模式</string>
+    <string name="theme_day">白天</string>
+    <string name="theme_night">黑夜</string>
+    <string name="theme_system">跟随系统</string>
     <string name="shizuku_denied">未授予 Shizuku 权限</string>
     <string name="shizuku_unavailable">请启动 Shizuku 后重试</string>
     <string name="shizuku_update">请更新 Shizuku 后重试</string>
@@ -9,7 +19,7 @@
     <string name="app_name_release">就文本</string>
 
     <string name="edit_user_files">JuiceText</string>
-    <string name="theme_toggle">切换白天/暗黑模式</string>
+    <string name="theme_toggle">切换白天/黑夜/跟随系统</string>
     <string name="parent_directory">..</string>
     <string name="empty_directory">（空目录）</string>
     <string name="loading_directory">正在加载文件夹…</string>
@@ -34,6 +44,7 @@
     <string name="delete">删除</string>
     <string name="deleted">已删除</string>
     <string name="delete_failed">删除失败：%1$s</string>
+    <string name="alias">别名</string>
     <string name="confirm_delete">删除「%1$s」？</string>
 
     <string name="find_replace">查找/替换</string>
@@ -81,15 +92,16 @@
 
     <string name="grant_access_message">在系统文件选择器中选中一个目录，然后点「使用此文件夹」授权编辑该目录下的文件。</string>
     <string name="grant_access_denied">未授权，无法启动编辑器。</string>
-    <string name="change_root_folder">切换根目录</string>
     <string name="open_single_file">打开单个文件…</string>
     <string name="new_text_file">新建文本文档</string>
     <string name="new_text_file_default_name">新建文本文档</string>
     <string name="new_text_file_failed">新建文本文档失败</string>
+    <string name="new_folder">新建文件夹</string>
+    <string name="new_folder_default_name">新建文件夹</string>
+    <string name="new_folder_failed">新建文件夹失败</string>
     <string name="low_memory_features_disabled">内存不足：已关闭部分功能（语法高亮、诊断、自动补全）。</string>
     <string name="editor_runtime_recovered">编辑器发生异常，已自动降级部分功能以保持可用。</string>
     <string name="open_file">打开</string>
     <string name="all_files_access_message">请在系统设置中允许访问和管理所有文件。</string>
-    <string name="use_this_folder">使用此文件夹</string>
     <string name="close_tab">关闭标签页</string>
 </resources>
