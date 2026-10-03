@@ -1,6 +1,6 @@
 # juicetext / 就文本
 
-Independent Android text editor derived from the Fcitx5 Android text-editor plugin.
+Independent Android text editor derived from the Fcitx5 Android fx version text-editor plugin, see https://github.com/fxliang/fcitx5-android
 
 - Application ID: `com.qiuminal.juicetext`
 - Upstream baseline: `nightly-0.1.3-436-g45ff6b22-20260824-134725`
