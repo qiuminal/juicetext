@@ -31,6 +31,8 @@
     <string name="error_save_file">Failed to save: %1$s</string>
     <string name="saved">Saved</string>
     <string name="unsaved_changes">Unsaved changes</string>
+    <string name="unsaved_tabs_message">%1$d files have unsaved changes:\n\n%2$s</string>
+    <string name="save_all">Save all</string>
     <string name="confirm_discard_changes">Discard your unsaved edits?</string>
     <string name="discard_changes">Discard</string>
     <string name="save">Save</string>
@@ -104,4 +106,17 @@
     <string name="open_file">Open</string>
     <string name="all_files_access_message">Allow access to manage all files in system settings.</string>
     <string name="close_tab">Close tab</string>
+    <string name="current_version">Version %1$s</string>
+    <string name="check_for_updates">Check for updates</string>
+    <string name="update_checking">Checking for updates…</string>
+    <string name="update_available_title">Update available</string>
+    <string name="update_available_message">A newer version is available: %1$s\n\nThe download runs in the background, so you can keep using the editor.</string>
+    <string name="update_download">Download</string>
+    <string name="update_download_description">Downloading the juicetext update</string>
+    <string name="update_queued">Downloading in the background. Open the notification to install.</string>
+    <string name="update_up_to_date">You are on the latest version (%1$s).</string>
+    <string name="update_no_apk">Release %1$s has no APK attached; opening the release page instead.</string>
+    <string name="update_open_release">Open release page</string>
+    <string name="update_failed">Could not start the download.</string>
+    <string name="update_failed_detail">Update check failed: %1$s</string>
 </resources>

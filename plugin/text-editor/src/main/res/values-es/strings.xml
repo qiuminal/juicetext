@@ -15,6 +15,8 @@
     <string name="error_save_file">No se pudo guardar: %1$s</string>
     <string name="saved">Guardado</string>
     <string name="unsaved_changes">Cambios sin guardar</string>
+    <string name="unsaved_tabs_message">%1$d archivos tienen cambios sin guardar:\n\n%2$s</string>
+    <string name="save_all">Guardar todo</string>
     <string name="confirm_discard_changes">¿Descartar los cambios sin guardar?</string>
     <string name="discard_changes">Descartar</string>
     <string name="save">Guardar</string>
@@ -63,4 +65,17 @@
     <string name="grant_access_denied">Acceso no concedido; el editor no puede iniciarse.</string>
     <string name="low_memory_features_disabled">Memoria baja: se desactivaron algunas funciones (resaltado, diagnósticos y autocompletado).</string>
     <string name="editor_runtime_recovered">Se produjo un error del editor. Se desactivaron algunas funciones para mantener la respuesta.</string>
+    <string name="current_version">Versión %1$s</string>
+    <string name="check_for_updates">Buscar actualizaciones</string>
+    <string name="update_checking">Buscando actualizaciones…</string>
+    <string name="update_available_title">Actualización disponible</string>
+    <string name="update_available_message">Hay una versión más reciente: %1$s\n\nLa descarga se realiza en segundo plano, así que puedes seguir usando el editor.</string>
+    <string name="update_download">Descargar</string>
+    <string name="update_download_description">Descargando la actualización de juicetext</string>
+    <string name="update_queued">Descargando en segundo plano. Abre la notificación para instalar.</string>
+    <string name="update_up_to_date">Ya tienes la última versión (%1$s).</string>
+    <string name="update_no_apk">La versión %1$s no incluye un APK; se abrirá la página de la versión.</string>
+    <string name="update_open_release">Abrir página de la versión</string>
+    <string name="update_failed">No se pudo iniciar la descarga.</string>
+    <string name="update_failed_detail">Error al buscar actualizaciones: %1$s</string>
 </resources>

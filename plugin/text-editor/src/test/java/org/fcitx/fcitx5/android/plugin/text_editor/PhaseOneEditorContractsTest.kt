@@ -358,6 +358,36 @@ class PhaseOneEditorContractsTest {
     }
 
     @Test
+    fun `release tags compare numerically not lexicographically`() {
+        // A string compare would rank "0.3.9" above "0.3.10"; segment-wise numeric comparison
+        // must not, or the updater would offer a downgrade.
+        assertTrue(UpdateChecker.isNewerVersion("0.3.10", "0.3.9"))
+        assertFalse(UpdateChecker.isNewerVersion("0.3.9", "0.3.10"))
+        assertTrue(UpdateChecker.isNewerVersion("0.4", "0.3.4"))
+        assertTrue(UpdateChecker.isNewerVersion("1.0.0", "0.9.9"))
+        assertFalse(UpdateChecker.isNewerVersion("0.3.4", "0.3.4"))
+        // Missing segments count as zero, so a shorter tag is not spuriously "newer".
+        assertFalse(UpdateChecker.isNewerVersion("0.3", "0.3.0"))
+        assertTrue(UpdateChecker.isNewerVersion("0.3.1", "0.3"))
+    }
+
+    @Test
+    fun `version normalisation strips the tag prefix and suffixes`() {
+        assertEquals("0.3.4", UpdateChecker.normalizeVersion("v0.3.4"))
+        assertEquals("0.3.4", UpdateChecker.normalizeVersion("V0.3.4"))
+        assertEquals("0.3.4", UpdateChecker.normalizeVersion("0.3.4"))
+        assertEquals("0.4.0", UpdateChecker.normalizeVersion("v0.4.0-rc1"))
+        assertEquals("0.4.0", UpdateChecker.normalizeVersion("0.4.0+build7"))
+    }
+
+    @Test
+    fun `non numeric versions never report an update`() {
+        // A malformed feed must fail closed: offering a bogus update is worse than staying quiet.
+        assertFalse(UpdateChecker.isNewerVersion("nightly", "0.3.4"))
+        assertFalse(UpdateChecker.isNewerVersion("0.3.5", "nightly"))
+    }
+
+    @Test
     fun `hiding the UI does not disable syntax highlighting`() {
         assertFalse(LowMemoryPolicy.shouldDegrade(LowMemoryPolicy.TRIM_MEMORY_UI_HIDDEN))
         assertFalse(LowMemoryPolicy.shouldDegrade(LowMemoryPolicy.TRIM_MEMORY_RUNNING_MODERATE))

@@ -316,8 +316,41 @@ class TextFileEditActivity : AppCompatActivity() {
     }
 
     override fun onSupportNavigateUp(): Boolean {
-        onBackPressedDispatcher.onBackPressed()
+        // The toolbar arrow means "go back to where I came from", so it always leaves the editor
+        // instead of delegating to the back callback, which would close the active tab first. Tabs
+        // are closed explicitly through the tab strip's close button, so a user who just opened a
+        // document by mistake can still get back to the previous screen without losing the tab.
+        leaveEditor()
         return true
+    }
+
+    /**
+     * Leaves the editor, protecting unsaved work in *every* tab.
+     *
+     * Checking only the active tab used to discard background edits silently: switching to a clean
+     * tab and going back wrote nothing, which loses work without ever warning. Mainstream editors
+     * answer this with a single consolidated prompt naming the unsaved files, so the user makes one
+     * decision for the whole window instead of confirming each file in turn.
+     */
+    private fun leaveEditor() {
+        val unsaved = tabs.filter { it.isDirty && !it.suppressDraft }
+        if (unsaved.isEmpty()) {
+            finish()
+            return
+        }
+        val names = unsaved.joinToString("\n") { "・${it.displayName}" }
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.unsaved_changes))
+            .setMessage(getString(R.string.unsaved_tabs_message, unsaved.size, names))
+            .setPositiveButton(R.string.save_all) { _, _ ->
+                saveAllTabs(unsaved) { finish() }
+            }
+            .setNeutralButton(R.string.discard_changes) { _, _ ->
+                unsaved.forEach { discardTab(it) }
+                finish()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     override fun onTrimMemory(level: Int) {
@@ -757,6 +790,9 @@ class TextFileEditActivity : AppCompatActivity() {
         binding.tabBar.layoutManager = LinearLayoutManager(
             this, LinearLayoutManager.HORIZONTAL, false
         )
+        // Switching a tab only restyles two items; the default change animation would cross-fade
+        // them and read as the tabs stretching. Suppressing it makes the switch instant.
+        binding.tabBar.itemAnimator = null
         binding.tabBar.adapter = tabBarAdapter
     }
 
@@ -1152,18 +1188,28 @@ class TextFileEditActivity : AppCompatActivity() {
 
     private fun isDirty(): Boolean = activeTab().isDirty
 
-    private fun saveFile(onSuccess: (() -> Unit)? = null) {
+    /**
+     * Saves [targetTab], which does not have to be the active tab.
+     *
+     * Leaving the editor can strand unsaved edits in background tabs, so the "save all" path has to
+     * write each of them in turn; keeping this tab-parameterised avoids switching the visible tab
+     * behind the user's back just to reuse [saveFile].
+     */
+    private fun saveTab(targetTab: EditorTab, onSuccess: (() -> Unit)? = null) {
         fileOperationGeneration++
         fileOperationInProgress = true
-        val targetTab = activeTab()
         val targetUri = targetTab.uri
         lifecycleScope.launch(crashHandler) {
             try {
                 if (targetTab.isLargeFile) {
-                    loadRemainingLargeFilePagesForSave()
+                    loadRemainingLargeFilePagesForSave(targetTab)
                 }
                 val savedVersion = targetTab.editGeneration
-                val content = targetTab.editor?.text?.toString() ?: return@launch
+                val content = targetTab.editor?.text?.toString()
+                if (content == null) {
+                    onSuccess?.invoke()
+                    return@launch
+                }
                 withContext(Dispatchers.IO) {
                     // "wt" = truncate-and-write. Without 't', some providers append rather than
                     // overwrite, leaving stale tail bytes when the new content is shorter.
@@ -1180,16 +1226,40 @@ class TextFileEditActivity : AppCompatActivity() {
                 getSharedPreferences(RECENT_EDIT_PREFS, Context.MODE_PRIVATE)
                     .edit().putBoolean(targetUri.toString(), true).apply()
                 if (tabs.indexOf(targetTab) == activeTabIndex) captureFileSnapshotAsync()
-                toast(getString(R.string.saved))
-                updateMenuState()
                 onSuccess?.invoke()
             } catch (e: Exception) {
-                Timber.e(e, "Failed to save $docUri")
+                Timber.e(e, "Failed to save $targetUri")
                 toast(getString(R.string.error_save_file, e.message ?: ""))
             } finally {
                 fileOperationInProgress = false
             }
         }
+    }
+
+    /**
+     * Saves every tab in [queue] in order, then runs [onAllSaved].
+     *
+     * Stops at the first failure rather than exiting, because the prompt that started this promised
+     * the edits would reach disk; bailing out silently is what loses data.
+     */
+    private fun saveAllTabs(queue: List<EditorTab>, onAllSaved: () -> Unit) {
+        val remaining = queue.toMutableList()
+        fun step() {
+            if (remaining.isEmpty()) {
+                toast(getString(R.string.saved))
+                updateMenuState()
+                tabBarAdapter.notifyDataSetChanged()
+                onAllSaved()
+                return
+            }
+            val tab = remaining.removeAt(0)
+            saveTab(tab) { step() }
+        }
+        step()
+    }
+
+    private fun saveFile(onSuccess: (() -> Unit)? = null) {
+        saveTab(activeTab(), onSuccess)
     }
 
     private fun saveAsFile() {
@@ -1277,10 +1347,18 @@ class TextFileEditActivity : AppCompatActivity() {
         return File(cacheDir, "fileedit/$hex.draft")
     }
 
-    private suspend fun loadRemainingLargeFilePagesForSave() {
-        if (!isLargeFile || activeTab().largeFileFullyLoaded) return
-        val pager = activeTab().largeFilePager ?: return
-        activeTab().largeFileLoadInFlight = true
+    /**
+     * Loads the remaining pages of a paginated large file so it can be written out whole.
+     *
+     * Only the tab whose editor is currently attached can absorb appended pages, so a background
+     * large-file tab is left alone: its unsaved edits cannot exist without the editor having been
+     * loaded, and forcing a load here would append into the wrong view.
+     */
+    private suspend fun loadRemainingLargeFilePagesForSave(tab: EditorTab = activeTab()) {
+        val isActive = tabs.getOrNull(activeTabIndex) === tab
+        if (!tab.isLargeFile || tab.largeFileFullyLoaded || !isActive) return
+        val pager = tab.largeFilePager ?: return
+        tab.largeFileLoadInFlight = true
         try {
             largeFilePagerMutex.withLock {
                 while (true) {
@@ -1292,13 +1370,13 @@ class TextFileEditActivity : AppCompatActivity() {
                     }
                 }
                 if (pager.isFullyConsumed) {
-                    activeTab().largeFileFullyLoaded = true
+                    tab.largeFileFullyLoaded = true
                     pager.close()
-                    activeTab().largeFilePager = null
+                    tab.largeFilePager = null
                 }
             }
         } finally {
-            activeTab().largeFileLoadInFlight = false
+            tab.largeFileLoadInFlight = false
         }
     }
 

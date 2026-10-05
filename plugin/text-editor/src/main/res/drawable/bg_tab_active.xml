@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Active tab chrome: a slightly lighter surface than the tab strip, with rounded top corners so
+  the active tab reads as contiguous with the editor below. Kept to a plain shape so inflating and
+  drawing stay cheap on low-end devices.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="?android:attr/colorBackground" />
+    <corners
+        android:topLeftRadius="8dp"
+        android:topRightRadius="8dp" />
+</shape>

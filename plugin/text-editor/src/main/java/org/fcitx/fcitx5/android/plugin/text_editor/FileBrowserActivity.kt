@@ -4,6 +4,7 @@
  */
 package org.fcitx.fcitx5.android.plugin.text_editor
 
+import android.app.Dialog
 import android.content.Context
 import android.Manifest
 import android.content.pm.PackageManager
@@ -25,6 +26,9 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
+import android.view.inputmethod.InputMethodManager
+import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -79,6 +83,8 @@ class FileBrowserActivity : AppCompatActivity() {
     private var retryAction: (() -> Unit)? = null
     private var showingCachedRoot = false
     private var restoredPath: String? = null
+    private var restoredShizukuMode = false
+    private var restoredShizukuPath = ""
     private var highlightedUri: String? = null
     private var awaitingShizuku = false
     private var pendingShizukuPath = "/storage/emulated/0"
@@ -121,6 +127,10 @@ class FileBrowserActivity : AppCompatActivity() {
         Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
         prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         restoredPath = savedInstanceState?.getString(STATE_CURRENT_PATH)
+        restoredShizukuMode = savedInstanceState?.getBoolean(STATE_SHIZUKU_MODE, false) == true
+        if (restoredShizukuMode) {
+            restoredShizukuPath = savedInstanceState?.getString(STATE_SHIZUKU_PATH).orEmpty()
+        }
 
         enableEdgeToEdge()
         binding = ActivityFileBrowserBinding.inflate(layoutInflater)
@@ -199,6 +209,11 @@ class FileBrowserActivity : AppCompatActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         if (currentPath.isNotEmpty()) outState.putString(STATE_CURRENT_PATH, currentPath)
+        // Android/data browsing is served by the Shizuku service, not the SAF tree, so the
+        // plain path is not enough to restore it: without this flag a configuration change
+        // (e.g. the theme toggle recreating the activity) would silently fall back to home.
+        outState.putBoolean(STATE_SHIZUKU_MODE, shizukuMode)
+        outState.putString(STATE_SHIZUKU_PATH, shizukuPath)
         super.onSaveInstanceState(outState)
     }
 
@@ -227,13 +242,26 @@ class FileBrowserActivity : AppCompatActivity() {
     }
 
     override fun onSupportNavigateUp(): Boolean {
+        // When this browser was opened from the editor just to pick a file, the toolbar arrow must
+        // return to that editor. Delegating to the back callback would instead walk up the
+        // directory tree, which is what the in-app "up one level" button already does.
+        if (callerForResult) {
+            finish()
+            return true
+        }
         onBackPressedDispatcher.onBackPressed()
         return true
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menu.add(Menu.NONE, MENU_THEME_TOGGLE, Menu.NONE, R.string.theme_toggle).apply {
+            // Tint explicitly instead of relying on the vector's own ?attr/colorControlNormal:
+            // the drawable cache can return a vector resolved against the previous night
+            // configuration right after the theme toggle recreates the activity, which showed
+            // up as a white icon on the white day-mode app bar.
             icon = getDrawable(ManualTheme.iconRes(ManualTheme.currentMode(this@FileBrowserActivity)))
+                ?.mutate()
+                ?.apply { setTint(resolveThemeColor(android.R.attr.textColorPrimary)) }
             setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
             setOnMenuItemClickListener {
                 ManualTheme.cycle(this@FileBrowserActivity)
@@ -505,7 +533,19 @@ class FileBrowserActivity : AppCompatActivity() {
             rootTree = root
             directoryJob = null
             val restorePath = restoredPath
+            val restoreShizuku = restoredShizukuMode
+            val restoreShizukuPath = restoredShizukuPath
             restoredPath = null
+            restoredShizukuMode = false
+            restoredShizukuPath = ""
+            // A Shizuku path (Android/data) is not reachable through the SAF tree, so restore it
+            // through the Shizuku service instead of the relative-path resolution below.
+            if (restoreShizuku && restoreShizukuPath.isNotBlank() &&
+                hasShizukuAccess() && needsShizukuPath(restoreShizukuPath)) {
+                shizukuMode = true
+                navigateShizuku(restoreShizukuPath)
+                return@launch
+            }
             if (!restorePath.isNullOrBlank() && restorePath != "/") {
                 val target = withContext(Dispatchers.IO) { resolveRelativeDirectory(root, restorePath) }
                 if (generation != directoryGeneration) return@launch
@@ -842,6 +882,18 @@ class FileBrowserActivity : AppCompatActivity() {
             })
         }
         container.addView(group)
+        container.addView(TextView(this).apply {
+            setText(getString(R.string.current_version, BuildConfig.VERSION_NAME))
+            setPadding(0, pad / 2, 0, 0)
+        })
+        container.addView(Button(this).apply {
+            setText(R.string.check_for_updates)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            setOnClickListener { checkForUpdates() }
+        })
         AlertDialog.Builder(this)
             .setTitle(R.string.settings)
             .setView(container)
@@ -857,6 +909,58 @@ class FileBrowserActivity : AppCompatActivity() {
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
+    }
+
+    /**
+     * Asks GitHub for the newest release and, when one exists, offers to queue it.
+     *
+     * The check runs on a background thread, and the download itself is handed to the system
+     * downloader, so neither the check nor the ~3 MB fetch ever blocks the editor.
+     */
+    private fun checkForUpdates() {
+        val checking = AlertDialog.Builder(this)
+            .setTitle(R.string.check_for_updates)
+            .setMessage(R.string.update_checking)
+            .setCancelable(false)
+            .create()
+        checking.show()
+        UpdateChecker.checkAsync(BuildConfig.VERSION_NAME) { result ->
+            if (isFinishing || isDestroyed) return@checkAsync
+            checking.dismiss()
+            when (result) {
+                is UpdateChecker.Result.UpdateAvailable -> AlertDialog.Builder(this)
+                    .setTitle(R.string.update_available_title)
+                    .setMessage(getString(R.string.update_available_message, result.tag))
+                    .setPositiveButton(R.string.update_download) { _, _ ->
+                        val id = UpdateChecker.enqueueDownload(this, result.apkUrl, result.tag)
+                        toast(
+                            if (id != null) getString(R.string.update_queued)
+                            else getString(R.string.update_failed)
+                        )
+                    }
+                    .setNeutralButton(R.string.update_open_release) { _, _ ->
+                        UpdateChecker.openReleasesPage(this, result.tag)
+                    }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
+
+                is UpdateChecker.Result.UpToDate ->
+                    toast(getString(R.string.update_up_to_date, result.tag))
+
+                is UpdateChecker.Result.NoApk ->
+                    AlertDialog.Builder(this)
+                        .setTitle(R.string.update_available_title)
+                        .setMessage(getString(R.string.update_no_apk, result.tag))
+                        .setPositiveButton(R.string.update_open_release) { _, _ ->
+                            UpdateChecker.openReleasesPage(this, result.tag)
+                        }
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .show()
+
+                is UpdateChecker.Result.Failed ->
+                    toast(getString(R.string.update_failed_detail, result.message))
+            }
+        }
     }
 
     private fun createNewTextFile() {
@@ -941,7 +1045,7 @@ class FileBrowserActivity : AppCompatActivity() {
             .setNegativeButton(android.R.string.cancel, null)
             .create()
         dialog.show()
-        editText.requestFocus()
+        focusAndShowKeyboard(dialog, editText)
     }
 
     private suspend fun openFileUri(
@@ -1054,15 +1158,13 @@ class FileBrowserActivity : AppCompatActivity() {
             .setNegativeButton(android.R.string.cancel, null)
             .create()
         dialog.show()
-        editText.requestFocus()
+        focusAndShowKeyboard(dialog, editText)
     }
 
     private fun showRenameDialog(doc: DocumentFile, currentName: String, isDirectory: Boolean) {
         val editText = EditText(this).apply {
             setText(currentName)
-            val dot = currentName.lastIndexOf('.')
-            val selectionEnd = if (!isDirectory && dot > 0) dot else currentName.length
-            setSelection(0, selectionEnd)
+            setSelection(0, baseNameSelectionLength(currentName, isDirectory))
         }
         val pad = (16 * resources.displayMetrics.density).toInt()
         val container = FrameLayout(this).apply {
@@ -1096,7 +1198,7 @@ class FileBrowserActivity : AppCompatActivity() {
             .setNegativeButton(android.R.string.cancel, null)
             .create()
         dialog.show()
-        editText.requestFocus()
+        focusAndShowKeyboard(dialog, editText)
     }
 
     private fun showDeleteConfirm(doc: DocumentFile, name: String) {
@@ -1238,8 +1340,56 @@ class FileBrowserActivity : AppCompatActivity() {
         android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show()
     }
 
+    /**
+     * Focuses a naming field and raises the soft keyboard once the dialog window is ready.
+     *
+     * A plain [InputMethodManager.showSoftInput] issued right after `show()` is dropped by the
+     * framework because the dialog window has not been focused yet, which is why the keyboard used
+     * to stay hidden until the user tapped the field. Two things are needed here: the dialog window
+     * must declare [WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE], and the focus
+     * request must be posted so it runs after the window is attached.
+     */
+    private fun focusAndShowKeyboard(dialog: Dialog, field: EditText) {
+        dialog.window?.setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE or
+                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+        )
+        field.requestFocus()
+        field.post {
+            field.requestFocus()
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+            imm?.showSoftInput(field, InputMethodManager.SHOW_IMPLICIT)
+        }
+    }
+
+    /** Length of the base name (everything before the extension) that a rename should pre-select. */
+    private fun baseNameSelectionLength(currentName: String, isDirectory: Boolean): Int {
+        if (isDirectory) return currentName.length
+        val dot = currentName.lastIndexOf('.')
+        return if (dot > 0) dot else currentName.length
+    }
+
+    /**
+     * Resolves a theme attribute to a concrete colour for the activity's current configuration.
+     *
+     * Menu icons are drawn from the drawable cache, which can hold a vector already resolved
+     * against the previous night mode; resolving the colour here keeps the tint correct right after
+     * a theme change.
+     */
+    private fun resolveThemeColor(attr: Int): Int {
+        val typed = android.util.TypedValue()
+        val resolved = theme.resolveAttribute(attr, typed, true)
+        return if (resolved && typed.resourceId != 0) {
+            androidx.core.content.ContextCompat.getColor(this, typed.resourceId)
+        } else {
+            typed.data
+        }
+    }
+
     companion object {
         private const val STATE_CURRENT_PATH = "current_path"
+        private const val STATE_SHIZUKU_MODE = "shizuku_mode"
+        private const val STATE_SHIZUKU_PATH = "shizuku_path"
         private const val RECENT_EDIT_PREFS = "recent_edit_transient"
         private const val PREFS_NAME = "text_editor"
         private const val PREF_HOME_PATH = "home_path"

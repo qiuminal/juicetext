@@ -19,8 +19,8 @@
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/tabBar"
         android:layout_width="match_parent"
-        android:layout_height="36dp"
-        android:background="?android:attr/colorPrimary"
+        android:layout_height="38dp"
+        android:background="@drawable/bg_tab_strip"
         android:clipToPadding="false"
         android:orientation="horizontal"
         android:paddingStart="4dp"
@@ -30,15 +30,6 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/toolbar" />
-
-    <View
-        android:id="@+id/tabBarDivider"
-        android:layout_width="match_parent"
-        android:layout_height="1px"
-        android:background="?android:attr/dividerHorizontal"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tabBar" />
 
     <LinearLayout
         android:id="@+id/searchBar"
@@ -50,7 +41,7 @@
         android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tabBarDivider">
+        app:layout_constraintTop_toBottomOf="@id/tabBar">
 
         <LinearLayout
             android:layout_width="match_parent"

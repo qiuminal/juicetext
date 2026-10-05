@@ -4,6 +4,13 @@ All notable changes to juicetext are recorded here. Release tags use the format 
 
 ## Unreleased
 
+## [0.3.5] - 2026-10-05
+
+- Fixed a data-loss bug where switching to an unmodified tab and then leaving the editor discarded the unsaved edits held by other tabs: leaving now offers to save every modified file.
+- Leaving the editor with several unsaved files asks once with a combined "N files are not saved yet" prompt listing each name, offering Save all, Discard, or Cancel.
+- Added an update checker under Settings: the current version is shown below the dark-mode options together with a "Check for updates" button that reads the project's GitHub releases.
+- Update downloads are handed to the system downloader, so the update proceeds in the background and never blocks the editor.
+
 ## [0.3.4] - 2026-10-04
 
 - Added a three-state dark mode (day → night → follow system), replacing the old light/dark toggle, with migration of the previous setting and a toolbar icon that reflects the current mode.

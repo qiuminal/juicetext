@@ -15,6 +15,8 @@
     <string name="error_save_file">Не удалось сохранить: %1$s</string>
     <string name="saved">Сохранено</string>
     <string name="unsaved_changes">Несохранённые изменения</string>
+    <string name="unsaved_tabs_message">В %1$d файлах есть несохранённые изменения:\n\n%2$s</string>
+    <string name="save_all">Сохранить всё</string>
     <string name="confirm_discard_changes">Отбросить несохранённые изменения?</string>
     <string name="discard_changes">Отбросить</string>
     <string name="save">Сохранить</string>
@@ -63,4 +65,17 @@
     <string name="grant_access_denied">Доступ не предоставлен; редактор не может запуститься.</string>
     <string name="low_memory_features_disabled">Недостаточно памяти: часть функций отключена (подсветка, диагностика, автодополнение).</string>
     <string name="editor_runtime_recovered">Произошла ошибка редактора. Часть функций отключена, чтобы приложение оставалось отзывчивым.</string>
+    <string name="current_version">Версия %1$s</string>
+    <string name="check_for_updates">Проверить обновления</string>
+    <string name="update_checking">Проверка обновлений…</string>
+    <string name="update_available_title">Доступно обновление</string>
+    <string name="update_available_message">Доступна более новая версия: %1$s\n\nЗагрузка идёт в фоне, поэтому вы можете продолжать работу в редакторе.</string>
+    <string name="update_download">Скачать</string>
+    <string name="update_download_description">Загрузка обновления juicetext</string>
+    <string name="update_queued">Загрузка в фоне. Откройте уведомление, чтобы установить.</string>
+    <string name="update_up_to_date">Установлена последняя версия (%1$s).</string>
+    <string name="update_no_apk">В версии %1$s нет APK; откроется страница выпуска.</string>
+    <string name="update_open_release">Открыть страницу выпуска</string>
+    <string name="update_failed">Не удалось начать загрузку.</string>
+    <string name="update_failed_detail">Не удалось проверить обновления: %1$s</string>
 </resources>
